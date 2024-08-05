@@ -3,7 +3,7 @@
 **这里我们以linux平台为主**
 官网: https://kubernetes.io/
 
-![](../readme.assets/Pasted%20image%2020240804232958.png)
+![](assets/Pasted%20image%2020240804232958.png)
 node: 节点服务器
 pod: 调度单位, node节点服务器上的一个虚拟环境.
 container: 调度单位中的一个容器
