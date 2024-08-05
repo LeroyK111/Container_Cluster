@@ -9,9 +9,14 @@ pod: 调度单位, node节点服务器上的一个虚拟环境.
 container: 调度单位中的一个容器
 
 **实现了四层抽象.**
+## 自学版
+
+[我们快速过了一遍教程版的基础上，我们根据官方文档再次学习一遍](obsidian://open?vault=cloud&file=K8S%2FTutorialEdition)
 
 
-## 安装k8s
+
+
+
 
 
 
