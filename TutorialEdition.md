@@ -8,8 +8,9 @@ https://www.bilibili.com/video/BV1w4411y7Go/?spm_id_from=333.337.search-card.all
 ## 容器管理器发展历史
 
 Apache Mesos： 开源分布式资源管理框架, 早期容器集群管理，现在不流行了。
+主从结构工作模式: 主节点分配任务, 从节点的Executor执行. zookeeper给主节点提供服务注册, 服务发现能力.
 
-Docker Swarm：简易容器集群架构，功能少。
+Docker Swarm：简易容器集群架构。跟docker无缝集成, 适合小集群规模.
 
 Kubernetes：主流的容器，部署管理框架。早期名字 Borg 用go语言
 - 轻量级
@@ -39,6 +40,8 @@ Kubernetes：主流的容器，部署管理框架。早期名字 Borg 用go语�
 	- ELK: k8s日志统一接入平台
 
 `高可用管理节点最好是>=3`
+
+
 ## Pod 
 
 - 自助式pod
