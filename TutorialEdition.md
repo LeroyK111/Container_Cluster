@@ -120,18 +120,530 @@ cron job: 高级批处理任务
 
 ## 资源清单
 
+针对不同的kind, 需要设置不同的配置文件yaml.
+
+| 资源类型                            | 描述                                       |     |
+| ------------------------------- | ---------------------------------------- | --- |
+| **Pod**                         | Kubernetes中最小的部署单元，包含一个或多个容器             | 1   |
+| **ReplicaSet**                  | 确保指定数量的Pod副本在任何时间都处于运行状态                 | 2   |
+| **Deployment**                  | 提供声明式更新和扩展Pod的机制，支持版本回滚、扩展等              | 3   |
+| **StatefulSet**                 | 管理有状态应用程序的资源，确保Pod是有序和稳定的                | 4   |
+| **DaemonSet**                   | 确保每个Node上运行一个Pod实例，适用于节点守护进程             | 5   |
+| **Job**                         | 一次性任务，负责确保指定数量的Pod成功结束                   | 6   |
+| **CronJob**                     | 定时任务管理，类似于Linux的cron任务                   | 7   |
+| **Service**                     | 定义Pod之间的网络访问规则，通常用于暴露应用程序                | 8   |
+| **ConfigMap**                   | 存储非机密的配置信息，以键值对的形式存在，并可以被Pod使用           | 9   |
+| **Secret**                      | 用于存储敏感信息（如密码、OAuth令牌），数据是以Base64编码的形式存储  | 10  |
+| **Ingress**                     | 提供HTTP和HTTPS路由到集群内部服务的规则，通常用于暴露外部访问      | 11  |
+| **PersistentVolume (PV)**       | 定义持久化存储资源的具体实现，由管理员创建                    | 12  |
+| **PersistentVolumeClaim (PVC)** | 用户用于请求存储资源的声明，可以绑定到PV上                   | 13  |
+| **Namespace**                   | 在同一个集群中为多个团队或项目提供隔离的工作空间                 | 14  |
+| ServiceAccount                  | 为Pod提供身份验证信息，用于访问API服务器。                 | 15  |
+| Role                            | 定义在命名空间内的权限。                             | 16  |
+| ClusterRole                     | 定义在集群范围内的权限。                             | 17  |
+| RoleBinding                     | 将Role绑定到一个或多个用户、组或ServiceAccount。        | 18  |
+| ClusterRoleBinding              | 将ClusterRole绑定到一个或多个用户、组或ServiceAccount。 | 19  |
+| NetworkPolicy                   | 定义Pod之间的网络访问规则，用于控制流量。                   | 20  |
+|                                 |                                          |     |
+
+### Pod配置文件
+
+```yaml
+apiVersion: v1          # apiVersion: 资源使用的API版本，表示使用了v1版本的核心API。
+kind: Pod               # kind: 资源的类型，这里定义的是一个Pod。
+metadata:               # metadata: 资源的元数据，包含名称、标签等。
+  name: my-pod          # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default    # namespace: Pod 所在的命名空间，默认是"default"。
+  labels:               # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app         # 这个标签可以用来选择和过滤与该应用相关的资源。
+spec:                   # spec: 资源的规格和配置，定义了Pod的期望状态。
+  containers:           # containers: 定义Pod中的容器列表。
+  - name: my-container  # name: 容器的名称，必须在Pod中唯一。
+    image: nginx:1.14.2 # image: 要运行的容器镜像，这里使用的是nginx版本1.14.2。
+    ports:              # ports: 暴露的容器端口列表。
+    - containerPort: 80 # containerPort: 容器内部的端口号，用于接收流量。
+  restartPolicy: Always # restartPolicy: Pod的重启策略，Always表示容器总是重启。
+  nodeSelector:         # nodeSelector: 用于选择将Pod调度到特定节点的标签。
+    disktype: ssd       # 这里指定Pod只能调度到带有“disktype: ssd”标签的节点上。
+  tolerations:          # tolerations: 定义Pod能容忍的污点，用于更灵活的调度策略。
+  - key: "key1"         # key: 污点的键。
+    operator: "Equal"   # operator: 操作符，Equal表示键和值必须相等。
+    value: "value1"     # value: 污点的值。
+    effect: "NoSchedule" # effect: Pod的调度行为，这里表示禁止调度到带有该污点的节点上。
+  volumes:              # volumes: 定义Pod使用的存储卷列表。
+  - name: my-volume     # name: 存储卷的名称。
+    emptyDir: {}        # emptyDir: 使用一个空目录作为存储卷，生命周期与Pod一致。
+```
+### ReplicaSet配置文件
+
+```yaml
+apiVersion: apps/v1        # apiVersion: 资源使用的API版本，表示使用了apps组中的v1版本API。
+kind: ReplicaSet           # kind: 资源的类型，这里定义的是一个ReplicaSet。
+metadata:                  # metadata: 资源的元数据，包含名称、标签等。
+  name: my-replicaset      # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default       # namespace: ReplicaSet 所在的命名空间，默认是 "default"。
+  labels:                  # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app            # 这个标签可以用来选择和过滤与该应用相关的资源。
+spec:                      # spec: 资源的规格和配置，定义了ReplicaSet的期望状态。
+  replicas: 3              # replicas: 副本数量，定义要运行的Pod副本的数量。
+  selector:                # selector: 选择器，用于选择与该ReplicaSet相关联的Pod。
+    matchLabels:           # matchLabels: 根据标签选择Pod，标签必须与Pod模板中的标签匹配。
+      app: my-app          # 这个标签匹配规则确保ReplicaSet只管理带有'app: my-app'标签的Pod。
+  template:                # template: Pod模板，用于定义由ReplicaSet创建的Pod的结构和内容。
+    metadata:              # metadata: Pod模板的元数据，包含Pod的标签等。
+      labels:              # labels: 标签，必须与选择器中的标签匹配，ReplicaSet才能管理这些Pod。
+        app: my-app        # 与选择器一致的标签，确保Pod属于这个ReplicaSet。
+    spec:                  # spec: Pod的规格，定义Pod中容器的具体配置。
+      containers:          # containers: 定义Pod中的容器列表。
+      - name: my-container # name: 容器的名称，必须在Pod中唯一。
+        image: nginx:1.14.2 # image: 要运行的容器镜像，这里使用的是nginx版本1.14.2。
+        ports:             # ports: 暴露的容器端口列表。
+        - containerPort: 80 # containerPort: 容器内部的端口号，用于接收流量。
+
+```
+
+### Deployment 配置文件
+```yaml
+apiVersion: apps/v1          # apiVersion: 资源使用的API版本，表示使用了apps组中的v1版本API。
+kind: Deployment             # kind: 资源的类型，这里定义的是一个Deployment，用于管理应用的部署。
+metadata:                    # metadata: 资源的元数据，包含名称、标签等。
+  name: my-deployment        # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default         # namespace: Deployment 所在的命名空间，默认是 "default"。
+  labels:                    # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app              # 这个标签可以用来选择和过滤与该应用相关的资源。
+spec:                        # spec: 资源的规格和配置，定义了Deployment的期望状态。
+  replicas: 3                # replicas: 副本数量，定义要运行的Pod副本的数量。
+  selector:                  # selector: 选择器，用于选择与该Deployment相关联的Pod。
+    matchLabels:             # matchLabels: 根据标签选择Pod，标签必须与Pod模板中的标签匹配。
+      app: my-app            # 这个标签匹配规则确保Deployment只管理带有'app: my-app'标签的Pod。
+  template:                  # template: Pod模板，用于定义由Deployment创建的Pod的结构和内容。
+    metadata:                # metadata: Pod模板的元数据，包含Pod的标签等。
+      labels:                # labels: 标签，必须与选择器中的标签匹配，Deployment才能管理这些Pod。
+        app: my-app          # 与选择器一致的标签，确保Pod属于这个Deployment。
+    spec:                    # spec: Pod的规格，定义Pod中容器的具体配置。
+      containers:            # containers: 定义Pod中的容器列表。
+      - name: my-container   # name: 容器的名称，必须在Pod中唯一。
+        image: nginx:1.14.2  # image: 要运行的容器镜像，这里使用的是nginx版本1.14.2。
+        ports:               # ports: 暴露的容器端口列表。
+        - containerPort: 80  # containerPort: 容器内部的端口号，用于接收流量。
+  strategy:                  # strategy: Deployment的更新策略，定义如何处理Pod的更新。
+    type: RollingUpdate      # type: 更新策略类型，RollingUpdate表示滚动更新。
+    rollingUpdate:           # rollingUpdate: 滚动更新的详细配置。
+      maxUnavailable: 1      # maxUnavailable: 更新过程中允许不可用的Pod最大数量，可以是绝对数或百分比。
+      maxSurge: 1            # maxSurge: 更新过程中允许超出期望Pod数量的最大Pod数量，可以是绝对数或百分比。
+  revisionHistoryLimit: 10   # revisionHistoryLimit: 保留的Deployment历史修订版本的数量，便于回滚。
+  progressDeadlineSeconds: 600 # progressDeadlineSeconds: 部署的进度超时时间，以秒为单位。
+```
 
 
-### 安装方式
+### StatefulSet 配置文件
 
-`拉取工具,镜像,文件等需要科学上网.`
+```yaml
+apiVersion: apps/v1            # apiVersion: 资源使用的API版本，表示使用了apps组中的v1版本API。
+kind: StatefulSet              # kind: 资源的类型，这里定义的是一个StatefulSet，用于管理有状态应用。
+metadata:                      # metadata: 资源的元数据，包含名称、标签等。
+  name: my-statefulset         # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default           # namespace: StatefulSet 所在的命名空间，默认是 "default"。
+  labels:                      # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                # 这个标签可以用来选择和过滤与该应用相关的资源。
+spec:                          # spec: 资源的规格和配置，定义了StatefulSet的期望状态。
+  serviceName: "nginx-service" # serviceName: 与StatefulSet关联的Headless Service的名称，用于Pod网络标识。
+  replicas: 3                  # replicas: 副本数量，定义要运行的Pod副本的数量。
+  selector:                    # selector: 选择器，用于选择与该StatefulSet相关联的Pod。
+    matchLabels:               # matchLabels: 根据标签选择Pod，标签必须与Pod模板中的标签匹配。
+      app: my-app              # 这个标签匹配规则确保StatefulSet只管理带有'app: my-app'标签的Pod。
+  template:                    # template: Pod模板，用于定义由StatefulSet创建的Pod的结构和内容。
+    metadata:                  # metadata: Pod模板的元数据，包含Pod的标签等。
+      labels:                  # labels: 标签，必须与选择器中的标签匹配，StatefulSet才能管理这些Pod。
+        app: my-app            # 与选择器一致的标签，确保Pod属于这个StatefulSet。
+    spec:                      # spec: Pod的规格，定义Pod中容器的具体配置。
+      containers:              # containers: 定义Pod中的容器列表。
+      - name: nginx-container  # name: 容器的名称，必须在Pod中唯一。
+        image: nginx:1.14.2    # image: 要运行的容器镜像，这里使用的是nginx版本1.14.2。
+        ports:                 # ports: 暴露的容器端口列表。
+        - containerPort: 80    # containerPort: 容器内部的端口号，用于接收流量。
+        volumeMounts:          # volumeMounts: 定义容器内的存储卷挂载点。
+        - name: my-storage     # name: 与定义的存储卷名称对应。
+          mountPath: /usr/share/nginx/html # mountPath: 容器内的挂载路径。
+  volumeClaimTemplates:        # volumeClaimTemplates: 定义StatefulSet所用的持久化存储卷模板。
+  - metadata:                  # metadata: 存储卷模板的元数据。
+      name: my-storage         # name: 存储卷的名称。
+    spec:                      # spec: 存储卷的规格和配置。
+      accessModes: ["ReadWriteOnce"] # accessModes: 存储卷的访问模式，ReadWriteOnce表示存储卷只能被单个节点读写。
+      resources:               # resources: 资源请求，定义了需要的存储大小。
+        requests:              # requests: 定义所需资源的请求值。
+          storage: 1Gi         # storage: 请求的存储容量大小。
+  updateStrategy:              # updateStrategy: StatefulSet的更新策略。
+    type: RollingUpdate        # type: 更新策略类型，RollingUpdate表示滚动更新。
+  podManagementPolicy: OrderedReady # podManagementPolicy: Pod的管理策略，OrderedReady表示有序部署和终止。
+
+```
+
+### DaemonSet 配置文件
+
+```yaml
+apiVersion: apps/v1          # apiVersion: 资源使用的API版本，表示使用了apps组中的v1版本API。
+kind: DaemonSet              # kind: 资源的类型，这里定义的是一个DaemonSet，用于在每个节点上运行一个Pod实例。
+metadata:                    # metadata: 资源的元数据，包含名称、标签等。
+  name: my-daemonset         # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default         # namespace: DaemonSet 所在的命名空间，默认是 "default"。
+  labels:                    # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app              # 这个标签可以用来选择和过滤与该应用相关的资源。
+spec:                        # spec: 资源的规格和配置，定义了DaemonSet的期望状态。
+  selector:                  # selector: 选择器，用于选择与该DaemonSet相关联的Pod。
+    matchLabels:             # matchLabels: 根据标签选择Pod，标签必须与Pod模板中的标签匹配。
+      app: my-app            # 这个标签匹配规则确保DaemonSet只管理带有'app: my-app'标签的Pod。
+  template:                  # template: Pod模板，用于定义由DaemonSet创建的Pod的结构和内容。
+    metadata:                # metadata: Pod模板的元数据，包含Pod的标签等。
+      labels:                # labels: 标签，必须与选择器中的标签匹配，DaemonSet才能管理这些Pod。
+        app: my-app          # 与选择器一致的标签，确保Pod属于这个DaemonSet。
+    spec:                    # spec: Pod的规格，定义Pod中容器的具体配置。
+      containers:            # containers: 定义Pod中的容器列表。
+      - name: my-container   # name: 容器的名称，必须在Pod中唯一。
+        image: nginx:1.14.2  # image: 要运行的容器镜像，这里使用的是nginx版本1.14.2。
+        ports:               # ports: 暴露的容器端口列表。
+        - containerPort: 80  # containerPort: 容器内部的端口号，用于接收流量。
+  updateStrategy:            # updateStrategy: DaemonSet的更新策略，定义如何处理Pod的更新。
+    type: RollingUpdate      # type: 更新策略类型，RollingUpdate表示滚动更新。
+    rollingUpdate:           # rollingUpdate: 滚动更新的详细配置。
+      maxUnavailable: 1      # maxUnavailable: 更新过程中允许不可用的Pod最大数量，可以是绝对数或百分比。
+  revisionHistoryLimit: 10   # revisionHistoryLimit: 保留的DaemonSet历史修订版本的数量，便于回滚。
+
+```
+
+### Job 配置文件
+
+```yaml
+apiVersion: batch/v1           # apiVersion: 资源使用的API版本，表示使用了batch组中的v1版本API。
+kind: Job                      # kind: 资源的类型，这里定义的是一个Job，用于运行一次性任务。
+metadata:                      # metadata: 资源的元数据，包含名称、标签等。
+  name: my-job                 # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default           # namespace: Job 所在的命名空间，默认是 "default"。
+  labels:                      # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                # 这个标签可以用来选择和过滤与该任务相关的资源。
+spec:                          # spec: 资源的规格和配置，定义了Job的期望状态。
+  completions: 1               # completions: 完成任务所需成功Pod的数量，默认值是1。
+  parallelism: 1               # parallelism: 并行运行的Pod数量，默认值是1。
+  backoffLimit: 4              # backoffLimit: Pod失败重试的最大次数。
+  template:                    # template: Pod模板，用于定义由Job创建的Pod的结构和内容。
+    metadata:                  # metadata: Pod模板的元数据，包含Pod的标签等。
+      labels:                  # labels: 标签，必须与选择器中的标签匹配，Job才能管理这些Pod。
+        app: my-app            # 与选择器一致的标签，确保Pod属于这个Job。
+    spec:                      # spec: Pod的规格，定义Pod中容器的具体配置。
+      containers:              # containers: 定义Pod中的容器列表。
+      - name: my-container     # name: 容器的名称，必须在Pod中唯一。
+        image: busybox         # image: 要运行的容器镜像，这里使用的是busybox镜像。
+        args:                  # args: 容器启动时执行的命令和参数。
+        - /bin/sh
+        - -c
+        - "echo Hello, Kubernetes! && sleep 30" # 容器运行的具体命令。
+      restartPolicy: Never     # restartPolicy: Pod的重启策略，Job通常设置为Never。
+```
+
+### CronJob 配置文件
+
+```yaml
+apiVersion: batch/v1           # apiVersion: 资源使用的API版本，表示使用了batch组中的v1版本API。
+kind: CronJob                  # kind: 资源的类型，这里定义的是一个CronJob，用于按照预定的时间表周期性地运行Job。
+metadata:                      # metadata: 资源的元数据，包含名称、标签等。
+  name: my-cronjob             # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default           # namespace: CronJob 所在的命名空间，默认是 "default"。
+  labels:                      # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                # 这个标签可以用来选择和过滤与该应用相关的资源。
+spec:                          # spec: 资源的规格和配置，定义了CronJob的期望状态。
+  schedule: "*/5 * * * *"      # schedule: Cron表达式，定义任务执行的时间表。这里表示每5分钟运行一次。
+  jobTemplate:                 # jobTemplate: 定义要执行的Job模板。
+    spec:                      # spec: Job的规格和配置，定义Pod的期望状态。
+      completions: 1           # completions: 完成任务所需成功Pod的数量，默认值是1。
+      parallelism: 1           # parallelism: 并行运行的Pod数量，默认值是1。
+      backoffLimit: 4          # backoffLimit: Pod失败重试的最大次数。
+      template:                # template: Pod模板，用于定义由Job创建的Pod的结构和内容。
+        metadata:              # metadata: Pod模板的元数据，包含Pod的标签等。
+          labels:              # labels: 标签，必须与选择器中的标签匹配，Job才能管理这些Pod。
+            app: my-app        # 与选择器一致的标签，确保Pod属于这个Job。
+        spec:                  # spec: Pod的规格，定义Pod中容器的具体配置。
+          containers:          # containers: 定义Pod中的容器列表。
+          - name: my-container # name: 容器的名称，必须在Pod中唯一。
+            image: busybox     # image: 要运行的容器镜像，这里使用的是busybox镜像。
+            args:              # args: 容器启动时执行的命令和参数。
+            - /bin/sh
+            - -c
+            - "echo Hello, Kubernetes! && sleep 30" # 容器运行的具体命令。
+          restartPolicy: OnFailure # restartPolicy: Pod的重启策略，设置为OnFailure表示只在失败时重启。
+  successfulJobsHistoryLimit: 3   # successfulJobsHistoryLimit: 要保留的成功Job的历史记录数量。
+  failedJobsHistoryLimit: 1       # failedJobsHistoryLimit: 要保留的失败Job的历史记录数量。
+  startingDeadlineSeconds: 100    # startingDeadlineSeconds: 若CronJob错过其计划时间的截止时间，以秒为单位。
+  concurrencyPolicy: Forbid       # concurrencyPolicy: 并发策略，Forbid表示不允许同时运行多个Job实例。
+
+```
+### Service 配置文件
+
+```yaml
+apiVersion: v1               # apiVersion: 资源使用的API版本，表示使用了v1版本的核心API。
+kind: Service                # kind: 资源的类型，这里定义的是一个Service，用于将Pod暴露为网络服务。
+metadata:                    # metadata: 资源的元数据，包含名称、标签等。
+  name: my-service           # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default         # namespace: Service 所在的命名空间，默认是 "default"。
+  labels:                    # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app              # 这个标签可以用来选择和过滤与该服务相关的资源。
+spec:                        # spec: 资源的规格和配置，定义了Service的期望状态。
+  selector:                  # selector: 用于选择符合条件的Pod。
+    app: my-app              # 选择标签为 'app: my-app' 的Pod。
+  ports:                     # ports: 定义服务的端口映射。
+  - protocol: TCP            # protocol: 端口使用的协议，这里是TCP。
+    port: 80                 # port: Service暴露的端口号。
+    targetPort: 8080         # targetPort: 容器内部实际接收流量的端口号。
+  type: ClusterIP            # type: 服务的类型，默认是ClusterIP，表示只能在集群内部访问。
+```
+### ConfigMap 配置文件
+
+```yaml
+apiVersion: v1               # apiVersion: 资源使用的API版本，表示使用了v1版本的核心API。
+kind: ConfigMap              # kind: 资源的类型，这里定义的是一个ConfigMap，用于存储非机密的配置信息。
+metadata:                    # metadata: 资源的元数据，包含名称、标签等。
+  name: my-configmap         # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default         # namespace: ConfigMap 所在的命名空间，默认是 "default"。
+  labels:                    # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app              # 这个标签可以用来选择和过滤与该ConfigMap相关的资源。
+data:                        # data: 包含键值对形式的配置信息。
+  configKey: configValue     # configKey: 一个配置键，configValue是其对应的值。
+  anotherConfigKey: anotherConfigValue # anotherConfigKey: 另一个配置键及其值。
+
+```
+### Secret 配置文件
+
+```yaml
+apiVersion: v1               # apiVersion: 资源使用的API版本，表示使用了v1版本的核心API。
+kind: Secret                 # kind: 资源的类型，这里定义的是一个Secret，用于存储敏感信息，如密码、OAuth令牌等。
+metadata:                    # metadata: 资源的元数据，包含名称、标签等。
+  name: my-secret            # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default         # namespace: Secret 所在的命名空间，默认是 "default"。
+  labels:                    # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app              # 这个标签可以用来选择和过滤与该Secret相关的资源。
+type: Opaque                 # type: Secret的类型，Opaque表示任意数据，可以用于一般用途。
+data:                        # data: 包含Base64编码的键值对形式的敏感信息。
+  username: YWRtaW4=         # username: "admin" 的 Base64 编码值，用于存储用户名。
+  password: cGFzc3dvcmQ=     # password: "password" 的 Base64 编码值，用于存储密码。
+```
+
+### Ingress 配置文件
+
+```yaml
+apiVersion: networking.k8s.io/v1 # apiVersion: 资源使用的API版本，表示使用了networking.k8s.io组中的v1版本API。
+kind: Ingress                   # kind: 资源的类型，这里定义的是一个Ingress，用于管理外部访问到集群内服务的HTTP和HTTPS路由。
+metadata:                       # metadata: 资源的元数据，包含名称、标签等。
+  name: my-ingress              # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default            # namespace: Ingress 所在的命名空间，默认是 "default"。
+  labels:                       # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                 # 这个标签可以用来选择和过滤与该应用相关的资源。
+spec:                           # spec: 资源的规格和配置，定义了Ingress的期望状态。
+  rules:                        # rules: 定义Ingress的路由规则。
+  - host: myapp.example.com     # host: 指定处理请求的主机名，例如 myapp.example.com。
+    http:                       # http: 定义HTTP路由规则。
+      paths:                    # paths: 路由的路径列表。
+      - path: /                 # path: 指定要匹配的URL路径，这里表示根路径。
+        pathType: Prefix        # pathType: 匹配路径的类型，Prefix表示路径前缀匹配。
+        backend:                # backend: 定义流量转发的后端服务。
+          service:              # service: 指定服务名称和端口，用于将流量路由到该服务。
+            name: my-service    # name: 后端服务的名称，即Service的名称。
+            port:               # port: 后端服务的端口。
+              number: 80        # number: 服务的端口号。
+  tls:                          # tls: 定义HTTPS的TLS设置。
+  - hosts:                      # hosts: 定义为哪些主机名启用TLS。
+    - myapp.example.com         # 需要TLS的主机名。
+    secretName: my-tls-secret   # secretName: 包含TLS证书的Secret的名称。
+```
+
+### PersistentVolume (PV) 配置文件
+
+```yaml
+apiVersion: v1               # apiVersion: 资源使用的API版本，表示使用了v1版本的核心API。
+kind: PersistentVolume       # kind: 资源的类型，这里定义的是一个PersistentVolume，用于存储持久化数据。
+metadata:                    # metadata: 资源的元数据，包含名称、标签等。
+  name: my-pv                # name: 资源的名称，在集群中必须是唯一的。
+  labels:                    # labels: 键值对，用于对资源进行标记和选择。
+    type: local-storage      # 标签可以用来选择和过滤与该存储卷相关的资源。
+spec:                        # spec: 资源的规格和配置，定义了PersistentVolume的详细属性。
+  capacity:                  # capacity: 定义存储卷的存储容量。
+    storage: 10Gi            # storage: 存储卷的大小，这里设置为10GiB。
+  accessModes:               # accessModes: 定义存储卷的访问模式。
+    - ReadWriteOnce          # ReadWriteOnce: 表示该存储卷可以被单个节点读写。
+  persistentVolumeReclaimPolicy: Retain # persistentVolumeReclaimPolicy: 定义存储卷的回收策略。
+                                      # Retain表示在删除PersistentVolumeClaim (PVC)后保留数据。
+  storageClassName: manual   # storageClassName: 存储类名，用于与PVC匹配。
+  hostPath:                  # hostPath: 定义一个主机路径，用作PersistentVolume的实际存储位置。
+    path: /mnt/data          # path: 主机路径，表示存储卷的数据将存储在该路径下。
+```
 
 
+### PersistentVolumeClaim (PVC) 配置文件
+
+```yaml
+apiVersion: v1                   # apiVersion: 资源使用的API版本，表示使用了v1版本的核心API。
+kind: PersistentVolumeClaim      # kind: 资源的类型，这里定义的是一个PersistentVolumeClaim，用于请求持久化存储卷。
+metadata:                        # metadata: 资源的元数据，包含名称、标签等。
+  name: my-pvc                   # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default             # namespace: PVC 所在的命名空间，默认是 "default"。
+  labels:                        # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                  # 这个标签可以用来选择和过滤与该应用相关的资源。
+spec:                            # spec: 资源的规格和配置，定义了PVC的期望状态。
+  accessModes:                   # accessModes: 定义PVC请求的存储卷访问模式。
+    - ReadWriteOnce              # ReadWriteOnce: 表示PVC请求的存储卷可以被单个节点以读写模式挂载。
+  resources:                     # resources: 定义资源请求，指定所需的存储大小。
+    requests:                    # requests: 资源请求的详细信息。
+      storage: 5Gi               # storage: 请求的存储容量大小，这里是5GiB。
+  storageClassName: manual       # storageClassName: 指定存储类名，用于与PV进行匹配。
+  volumeMode: Filesystem         # volumeMode: 指定卷的类型，默认为Filesystem，可以选择Block。
+  selector:                      # selector: 定义PVC选择符合条件的PV的标签。
+    matchLabels:                 # matchLabels: 通过标签选择特定的PV。
+      type: local-storage        # 标签 'type: local-storage' 用于选择PV。
+```
 
 
+### Namespace 配置文件
+
+```yaml
+apiVersion: v1                # apiVersion: 资源使用的API版本，表示使用了v1版本的核心API。
+kind: Namespace               # kind: 资源的类型，这里定义的是一个Namespace，用于为Kubernetes中的资源提供隔离的环境。
+metadata:                     # metadata: 资源的元数据，包含名称、标签等。
+  name: my-namespace          # name: 资源的名称，在集群中必须是唯一的。
+  labels:                     # labels: 键值对，用于对资源进行标记和选择。
+    environment: development  # 标签 "environment: development" 用于标记命名空间的用途，例如开发环境。
+
+```
 
 
+### ServiceAccount 配置文件
 
+```yaml
+apiVersion: v1                  # apiVersion: 资源使用的API版本，表示使用了v1版本的核心API。
+kind: ServiceAccount            # kind: 资源的类型，这里定义的是一个ServiceAccount，用于在Kubernetes集群中为Pod提供身份验证。
+metadata:                       # metadata: 资源的元数据，包含名称、命名空间和标签等。
+  name: my-service-account      # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default            # namespace: ServiceAccount 所在的命名空间，默认是 "default"。
+  labels:                       # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                 # 这个标签可以用来选择和过滤与该ServiceAccount相关的资源。
+secrets:                        # secrets: 与ServiceAccount相关联的Secret资源，用于存储凭证（自动生成）。
+  - name: my-service-account-token-abcde # name: 关联的Secret的名称，存储ServiceAccount的身份验证信息。
+
+```
+
+
+### Role 配置文件
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1  # apiVersion: 资源使用的API版本，表示使用了rbac.authorization.k8s.io组中的v1版本API。
+kind: Role                               # kind: 资源的类型，这里定义的是一个Role，用于在命名空间内定义权限。
+metadata:                                # metadata: 资源的元数据，包含名称、命名空间和标签等。
+  name: my-role                          # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default                     # namespace: Role 所在的命名空间，默认是 "default"。
+  labels:                                # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                          # 这个标签可以用来选择和过滤与该Role相关的资源。
+rules:                                   # rules: 定义Role的权限规则列表。
+- apiGroups: [""]                        # apiGroups: 指定资源所属的API组，""表示核心API组。
+  resources: ["pods"]                    # resources: 适用的资源类型，这里定义为pods。
+  verbs: ["get", "watch", "list"]        # verbs: 允许的操作，例如获取(get)、监视(watch)、列出(list)。
+- apiGroups: [""]                        # 另一个规则
+  resources: ["secrets"]                 # 适用的资源类型，这里定义为secrets。
+  verbs: ["get"]                         # 允许的操作，这里是获取(get)。
+
+```
+
+
+### ClusterRole 配置文件
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1  # apiVersion: 资源使用的API版本，表示使用了rbac.authorization.k8s.io组中的v1版本API。
+kind: ClusterRole                        # kind: 资源的类型，这里定义的是一个ClusterRole，用于集群范围内定义权限。
+metadata:                                # metadata: 资源的元数据，包含名称、标签等。
+  name: my-clusterrole                   # name: 资源的名称，在集群中必须是唯一的。
+  labels:                                # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                          # 这个标签可以用来选择和过滤与该ClusterRole相关的资源。
+rules:                                   # rules: 定义ClusterRole的权限规则列表。
+- apiGroups: [""]                        # apiGroups: 指定资源所属的API组，""表示核心API组。
+  resources: ["pods", "services"]        # resources: 适用的资源类型，这里定义为pods和services。
+  verbs: ["get", "list", "watch"]        # verbs: 允许的操作，例如获取(get)、列出(list)、监视(watch)。
+- apiGroups: [""]                        # 另一个规则
+  resources: ["namespaces"]              # 适用的资源类型，这里定义为namespaces。
+  verbs: ["get", "create", "delete"]     # 允许的操作，例如获取(get)、创建(create)、删除(delete)。
+
+```
+
+### RoleBinding 配置文件
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1  # apiVersion: 资源使用的API版本，表示使用了rbac.authorization.k8s.io组中的v1版本API。
+kind: RoleBinding                        # kind: 资源的类型，这里定义的是一个RoleBinding，用于将Role绑定到指定的用户、组或ServiceAccount。
+metadata:                                # metadata: 资源的元数据，包含名称、命名空间和标签等。
+  name: my-rolebinding                   # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default                     # namespace: RoleBinding 所在的命名空间，默认是 "default"。
+  labels:                                # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                          # 这个标签可以用来选择和过滤与该RoleBinding相关的资源。
+subjects:                                # subjects: 定义角色绑定的主体列表，可以是用户、组或ServiceAccount。
+- kind: ServiceAccount                   # kind: 主体的类型，这里是ServiceAccount。
+  name: my-service-account               # name: 主体的名称，表示绑定的ServiceAccount名称。
+  namespace: default                     # namespace: 主体所在的命名空间，这里与RoleBinding相同。
+roleRef:                                 # roleRef: 定义要绑定的Role或ClusterRole。
+  apiGroup: rbac.authorization.k8s.io    # apiGroup: 资源所在的API组，这里是rbac.authorization.k8s.io。
+  kind: Role                             # kind: 引用的资源类型，这里是Role，也可以是ClusterRole。
+  name: my-role                          # name: 引用的Role的名称，表示要绑定的Role名称。
+```
+
+
+### ClusterRoleBinding 配置文件
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1  # apiVersion: 资源使用的API版本，表示使用了rbac.authorization.k8s.io组中的v1版本API。
+kind: ClusterRoleBinding                 # kind: 资源的类型，这里定义的是一个ClusterRoleBinding，用于将ClusterRole绑定到指定的用户、组或ServiceAccount。
+metadata:                                # metadata: 资源的元数据，包含名称、标签等。
+  name: my-clusterrolebinding            # name: 资源的名称，在集群中必须是唯一的。
+  labels:                                # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                          # 这个标签可以用来选择和过滤与该ClusterRoleBinding相关的资源。
+subjects:                                # subjects: 定义角色绑定的主体列表，可以是用户、组或ServiceAccount。
+- kind: ServiceAccount                   # kind: 主体的类型，这里是ServiceAccount。
+  name: my-service-account               # name: 主体的名称，表示绑定的ServiceAccount名称。
+  namespace: default                     # namespace: 主体所在的命名空间。
+roleRef:                                 # roleRef: 定义要绑定的ClusterRole。
+  apiGroup: rbac.authorization.k8s.io    # apiGroup: 资源所在的API组，这里是rbac.authorization.k8s.io。
+  kind: ClusterRole                      # kind: 引用的资源类型，这里是ClusterRole。
+  name: my-clusterrole                   # name: 引用的ClusterRole的名称，表示要绑定的ClusterRole名称。
+```
+
+
+### NetworkPolicy 配置文件
+
+```yaml
+apiVersion: networking.k8s.io/v1  # apiVersion: 资源使用的API版本，表示使用了networking.k8s.io组中的v1版本API。
+kind: NetworkPolicy               # kind: 资源的类型，这里定义的是一个NetworkPolicy，用于控制Pod之间的网络流量。
+metadata:                         # metadata: 资源的元数据，包含名称、命名空间和标签等。
+  name: my-network-policy         # name: 资源的名称，在集群中必须是唯一的。
+  namespace: default              # namespace: NetworkPolicy 所在的命名空间，默认是 "default"。
+  labels:                         # labels: 键值对，用于对资源进行标记和选择。
+    app: my-app                   # 这个标签可以用来选择和过滤与该NetworkPolicy相关的资源。
+spec:                             # spec: 资源的规格和配置，定义了NetworkPolicy的详细规则。
+  podSelector:                    # podSelector: 用于选择策略适用的Pod。
+    matchLabels:                  # matchLabels: 根据标签选择Pod。
+      role: db                    # 这里选择标签为 'role: db' 的Pod。
+  policyTypes:                    # policyTypes: 定义网络策略的类型，可以是 "Ingress"、"Egress" 或两者。
+  - Ingress                       # Ingress: 限制进入Pod的流量。
+  - Egress                        # Egress: 限制离开Pod的流量。
+  ingress:                        # ingress: 定义允许进入的流量规则列表。
+  - from:                         # from: 指定允许进入流量的来源。
+    - ipBlock:                    # ipBlock: 基于IP地址块的流量规则。
+        cidr: 192.168.1.0/24      # cidr: 允许进入的IP地址范围。
+        except:                   # except: 排除特定的IP地址范围。
+        - 192.168.1.5/32          # 这个IP地址将被排除在允许范围之外。
+    - namespaceSelector:          # namespaceSelector: 根据命名空间标签选择允许进入流量的来源Pod。
+        matchLabels:
+          project: myproject      # 允许来自标签为 'project: myproject' 的命名空间中的Pod的流量。
+    - podSelector:                # podSelector: 根据Pod标签选择允许进入流量的来源Pod。
+        matchLabels:
+          role: frontend          # 允许来自标签为 'role: frontend' 的Pod的流量。
+  egress:                         # egress: 定义允许离开的流量规则列表。
+  - to:                           # to: 指定允许离开流量的目标。
+    - ipBlock:                    # ipBlock: 基于IP地址块的流量规则。
+        cidr: 10.0.0.0/24         # cidr: 允许离开的IP地址范围。
+```
 
 
 ## 服务发现
