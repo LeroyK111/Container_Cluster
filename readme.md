@@ -8,11 +8,11 @@ node: 节点服务器
 pod: 调度单位, node节点服务器上的一个虚拟环境.
 container: 调度单位中的一个容器
 
-**实现了四层抽象.**
+**实现了网络的四层抽象.**
 ## 自学版
 
-[我们快速过了一遍教程版的基础上，我们根据官方文档再次学习一遍](obsidian://open?vault=cloud&file=K8S%2FTutorialEdition)
-
+[我们快速过了一遍教程版的基础上，我们根据官方文档再次学习一遍](TutorialEdition.md)
+### 主要名词解释:
 - schedulet: 调度器, 为node分配任务
 - api server 集群网关,.负载均衡
 - etcd 键值数据库
@@ -32,7 +32,6 @@ container: 调度单位中的一个容器
 	- federation: 跨集群中心多k8s统一管理功能
 	- Prometheus: k8s集群监控
 	- ELK: k8s日志统一接入平台
-
 
 
 
