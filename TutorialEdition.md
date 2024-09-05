@@ -709,6 +709,17 @@ spec:                             # spec: 资源的规格和配置，定义了Ne
 | **自动伸缩**   | KEDA                    | Kubernetes Event-driven Autoscaling，基于事件的自动扩展工具。      |
 | **备份与恢复**  | Velero                  | 用于 Kubernetes 集群和持久卷的备份与恢复的工具。                        |
 | **镜像管理**   | Harbor                  | 用于企业级镜像管理, 为continue提供镜像                              |
+|            |                         |                                                       |
+|            |                         |                                                       |
+
+### 常用部署方式
+
+![](assets/Pasted%20image%2020240904235623.png)
+
+这里我们使用
+
+
+
 
 ### HELM 包管理器
 
