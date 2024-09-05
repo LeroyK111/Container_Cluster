@@ -29,8 +29,13 @@ KVM
 8. 8.Microsoft Hyper-V. 无论你是软件开发人员、IT 专业人员还是技术爱好者，你们中的许多人都需要运行多个操作系统。 Hyper-V 让你可以在 Windows 上以虚拟机形式运行多个操作系统。
 9. Multipass. Multipass 是一个轻量虚拟机管理器，是由 Ubuntu 运营公司 Canonical 所推出的开源项目。运行环境支持 Linux、Windows、macOS。在不同的操作系统上，使用的是不同的虚拟化技术。在 Linux 上使用的是 KVM、Window 上使用 Hyper-V、macOS 中使用 HyperKit 以最小开销运行VM，支持在笔记本模拟小型云。同时，Multipass 提供了一个命令行界面来启动和管理 Linux 实例。下载一个全新的镜像需要几秒钟的时间，并且在几分钟内就可以启动并运行 VM。
 
+
 ### Hyper-V
 
+#### WSL-2 和 hyper-V 的区别
+hyper-V 是完整的硬件有虚拟化, 可以拥有完整虚拟机. 实现完整的系统功能, 必须学习K8S中的node时, 就可以使用.
+
+ WSL-2 则是内核兼容层面的虚拟化, 可以执行linux相关的命令, 但是无法作为独立的node节点去使用. 比如 windows docker 就是这样实现的. linux功能阉割的比较多.
 ### 启用 Hyper-V 功能
 ![](assets/Pasted%20image%2020240905011531.png)
 也可以使用管理员命令启动.
@@ -83,10 +88,83 @@ Set-VMFirmware 命令用于将虚拟机的固件配置为从 DVD 驱动器启动
 ![](assets/Pasted%20image%2020240905014032.png)
 链接虚拟机, 进行安装
 ![](assets/Pasted%20image%2020240905014420.png)
+![](assets/Pasted%20image%2020240905203916.png)
+这样依赖我们就创建了三个虚拟机. 
 
+### 常用命令
 
+```sh
+# 1. 运行以下命令以显示适用于 Hyper-V PowerShell 模块的 PowerShell 命令的可搜索列表。
+Get-Command -Module hyper-v | Out-GridView
+# 若要了解有关特定 PowerShell 命令的详细信息，请使用 `Get-Help`。 例如，运行以下命令将返回有关 `Get-VM` Hyper-V 命令的信息。
+Get-Help Get-VM
+```
 
+```sh
+# 读取虚拟机列表
 
+PS C:\Users\Administrator> Get-VM
+
+Name      State   CPUUsage(%) MemoryAssigned(M) Uptime           Status   Version
+----      -----   ----------- ----------------- ------           ------   -------
+k8sMaster Running 0           6630              00:51:18.4560000 正常运行 11.0
+k8sSlave1 Running 0           7148              00:51:48.7110000 正常运行 11.0
+k8sSlave2 Running 0           6832              00:51:51.1230000 正常运行 11.0
+
+# 返回已启动的虚拟机
+Get-VM | where {$_.State -eq 'Running'}
+# 关机的虚拟机
+Get-VM | where {$_.State -eq 'Off'}
+# 特定名字的虚拟机 启动
+Start-VM -Name k8sMaster
+
+# 启动所有已关机的虚拟机
+Get-VM | where {$_.State -eq 'Off'} | Start-VM
+# 关闭所有虚拟机
+Get-VM | where {$_.State -eq 'Running'} | Stop-VM
+
+# 创建虚拟机的快照
+Get-VM -Name <VM Name> | Checkpoint-VM -SnapshotName <name for snapshot>
+```
+新建虚拟机
+```sh
+$VMName = "VMNAME"
+
+$VM = @{
+     Name = $VMName
+     MemoryStartupBytes = 2147483648
+     Generation = 2
+     NewVHDPath = "C:\Virtual Machines\$VMName\$VMName.vhdx"
+     NewVHDSizeBytes = 53687091200
+     BootDevice = "VHD"
+     Path = "C:\Virtual Machines\$VMName"
+     SwitchName = (Get-VMSwitch).Name
+ }
+
+New-VM @VM
+```
+powershell 直连, 仅限windows主机之间. 不提供进入linux等其他虚拟机操作命令行的 command.
+https://learn.microsoft.com/zh-cn/virtualization/hyper-v-on-windows/user-guide/powershell-direct
+
+### 创建虚拟网关
+推荐可视化配置
+![](assets/Pasted%20image%2020240905234708.png)
+
+以下是命令行配置嵌套虚拟机网络：
+https://learn.microsoft.com/zh-cn/virtualization/hyper-v-on-windows/user-guide/enable-nested-virtualization
+
+对于在虚拟机中创建虚拟机,  是可以的, 但不推荐啊. 资源被消耗的太快.
+
+配置虚拟交换机
+- NAT网络地址转换: https://learn.microsoft.com/zh-cn/virtualization/hyper-v-on-windows/user-guide/setup-nat-network  选择内部虚拟交换机, 让虚拟机能够链接外网
+- 外部, 本质就是虚拟机对外放出接口, 内部服务器反向代理, 一般不推荐
+- 专用, 虚拟机之间相互通讯. 
+
+![](assets/Pasted%20image%2020240905235440.png)
+
+### 其他功能
+用不太上, 毕竟windows虚拟机还是学习和测试用,  生产环境还是纯粹的 container容器 or linux裸机
+https://learn.microsoft.com/zh-cn/virtualization/hyper-v-on-windows/user-guide/refactor-wmiv1-to-wmiv2
 
 
 ## 自学版
@@ -112,11 +190,6 @@ Set-VMFirmware 命令用于将虚拟机的固件配置为从 DVD 驱动器启动
 	- federation: 跨集群中心多k8s统一管理功能
 	- Prometheus: k8s集群监控
 	- ELK: k8s日志统一接入平台
-
-
-
-
-
 
 
 ## k3s 轻量级k8s集群框架

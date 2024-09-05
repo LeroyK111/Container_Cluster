@@ -716,7 +716,10 @@ spec:                             # spec: 资源的规格和配置，定义了Ne
 
 ![](assets/Pasted%20image%2020240904235623.png)
 
-这里我们使用
+这里我们使用hyper-v搭建三个node节点服务器.
+
+
+
 
 
 
