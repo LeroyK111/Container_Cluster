@@ -717,6 +717,17 @@ spec:                             # spec: 资源的规格和配置，定义了Ne
 ![](assets/Pasted%20image%2020240904235623.png)
 
 这里我们使用hyper-v搭建三个node节点服务器.
+![](assets/Pasted%20image%2020240906015659.png)
+
+### docker-cri实现
+```
+K8S CRI容器化规范.  v1.24 < version 还在支持docker. v1.25 < 以后就不再支持了 dockershim 组件了.
+```
+
+
+
+
+
 
 
 
