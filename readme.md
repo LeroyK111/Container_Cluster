@@ -155,7 +155,36 @@ https://learn.microsoft.com/zh-cn/virtualization/hyper-v-on-windows/user-guide/e
 
 对于在虚拟机中创建虚拟机,  是可以的, 但不推荐啊. 资源被消耗的太快.
 
-配置虚拟交换机
+但是我们是要使用容器编排技术, 需要 启用嵌套虚拟化.
+
+powershell 管理员模式
+```powershell
+# 关闭所有的 Runing 虚拟机
+Get-VM | where {$_.State -eq 'Running'} | Stop-VM
+
+# 所有的虚拟系统
+PS C:\Users\Administrator> Get-VM
+
+Name      State CPUUsage(%) MemoryAssigned(M) Uptime   Status   Version
+----      ----- ----------- ----------------- ------   ------   -------
+k8sMaster Off   0           0                 00:00:00 正常运行 11.0
+k8sSlave1 Off   0           0                 00:00:00 正常运行 11.0
+k8sSlave2 Off   0           0                 00:00:00 正常运行 11.0
+
+# 开启所有的 虚拟机的嵌套虚拟化 
+Get-VM | Where-Object { $_.State -eq 'Off' } | ForEach-Object { Set-VMProcessor -VMName $_.Name -ExposeVirtualizationExtensions $true }
+
+# 启动所有的 Runing 虚拟机
+Get-VM | where {$_.State -eq 'Running'} | Start-VM
+
+# 关闭虚拟机的 嵌套虚拟化
+Set-VMProcessor -VMName <VMName> -ExposeVirtualizationExtensions $false
+```
+
+这样虚拟机就可以再次开启虚拟机了.  
+windows宿主机 -> Hyper-V ( Linux ) -> Linux  开启 docker kvm 
+
+#### 配置虚拟交换机
 - NAT网络地址转换: https://learn.microsoft.com/zh-cn/virtualization/hyper-v-on-windows/user-guide/setup-nat-network  选择内部虚拟交换机, 让虚拟机能够链接外网
 - 外部, 本质就是虚拟机对外放出接口, 内部服务器反向代理, 一般不推荐
 - 专用, 虚拟机之间相互通讯. 

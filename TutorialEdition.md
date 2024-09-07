@@ -721,17 +721,177 @@ spec:                             # spec: 资源的规格和配置，定义了Ne
 
 ### docker-cri实现
 ```
-K8S CRI容器化规范.  v1.24 < version 还在支持docker. v1.25 < 以后就不再支持了 dockershim 组件了.
+K8S CRI容器化规范.  v1.24 < version 还在支持docker. 
+v1.25 以后就不再支持了 dockershim 组件了. 需要插件手动实现cri协议
 ```
 
+这里我们就用 docker(cri) + k8s 进行容器集群化部署.
 
+#### 开始安装基本软件
+docker 官方文档: https://docs.docker.com/guides/deployment-orchestration/kube-deploy/
+docker-cri 文档:  https://mirantis.github.io/cri-dockerd/usage/install/
+kubernetes 文档: https://kubernetes.io/zh-cn/docs/setup/
 
+##### 环境准备
+三个 ubuntu 主机
 
+- 开启ipv4转发, 应用在 all node
+```sh
+# 设置所需的 sysctl 参数，参数在重新启动后保持不变
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.ipv4.ip_forward = 1
+EOF
 
+# 应用 sysctl 参数而不重新启动
+sudo sysctl --system
 
+# 使用以下命令验证 net.ipv4.ip_forward 是否设置为 1：
+sysctl net.ipv4.ip_forward
+```
 
+- 关闭防护墙? 方便学习罢了
+```
+sudo ufw status
+sudo ufw enable
+sudo ufw disable
+```
 
+- 某些情况下要关闭 selinux (ubuntu 不用管)
+```sh
+sestatus
+```
 
+- 关闭 swap 禁止使用 (虚拟内存交换空间, 主要是性能考虑)
+```sh
+sudo swapoff -a 临时禁用
+vi /etc/fstab 永久禁用
+free -m 查看状态
+```
+编辑 /etc/fstab 文件，注释掉或删除包含 /swap.img 的行
+![](assets/Pasted%20image%2020240907213044.png)
+
+- 设置hostname 和 ip 的映射关系
+```sh
+# 三台 nodes 分别设置 别名
+hostnamectl set-hostname k8smaster
+
+# 只有 master node 设置 vi /etc/hosts 文件
+# 直接用脚本追加
+cat >> /etc/hosts << EOF
+172.24.204.91 k8smaster
+172.24.199.145 k8sslave1
+172.24.194.94 k8sslave2
+EOF
+```
+![](assets/Pasted%20image%2020240907215500.png)
+
+- 配置流量转发
+```sh
+# 设置所需的 sysctl 参数，参数在重新启动后保持不变
+cat >> /etc/sysctl.d/k8s.conf  << EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+# 应用 sysctl 参数而不重新启动
+sudo sysctl --system
+```
+
+- 检查时间同步配置( 如不同步, 则需要自己配置 )
+这里三台node 都是自动同步
+![](assets/Pasted%20image%2020240907221555.png)
+##### 安装 docker 和 docker-cri
+
+- 先检查 虚拟机的嵌套虚拟化 功能 是否开启.
+```sh
+# 非0 则是支持 虚拟化
+egrep -c '(vmx|svm)' /proc/cpuinfo
+
+# 一般都是默认开启虚拟化模块 
+# modprobe kvm
+# modprobe kvm_intel  # Intel processors
+# modprobe kvm_amd    # AMD processors
+lsmod | grep kvm
+
+# 查看你在那种虚拟机里
+root@k8sslave2:/home/k8sslave2# systemd-detect-virt
+microsoft
+```
+
+存在三种安装方式: https://docs.docker.com/engine/install/ubuntu/#installation-methods
+- apt 安装:  以下我们采用这种方法安装 docker 
+- deb package 安装: 
+	- https://docs.docker.com/desktop/install/linux-install/
+	- https://docs.docker.com/engine/install/ubuntu/#install-from-a-package
+	- `sudo apt-get install ./docker-desktop-<arch>.deb`
+	- https://download.docker.com/linux/ 发行版
+	- 参考上述文档, 都可以实现 .deb 的下载安装
+- shell 脚本安装: https://docs.docker.com/engine/install/ubuntu/#install-using-the-convenience-script
+
+###### 采用 apt 安装 docker
+- 非特权用户对 docker container 的namespace 会出现问题. 建议使用以下命令
+```sh
+# 命名空间权限
+sudo echo "kernel.apparmor_restrict_unprivileged_userns=0" | sudo tee /etc/sysctl.d/99-docker.conf
+
+# 立即生效
+sudo sysctl --system
+```
+
+- 设置apt docker 存储库:
+```sh
+# Add Docker's official GPG key:
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+```
+install docker
+```sh
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+configure docker images source
+```sh
+# 编辑镜像源文件
+nano /etc/docker/daemon.json
+# 添加镜像
+{
+   "registry-mirrors": [
+    "https://hub.uuuadc.top",
+    "https://docker.anyhub.us.kg",
+    "https://dockerhub.jobcher.com",
+    "https://dockerhub.icu",
+    "https://docker.ckyl.me",
+    "https://docker.awsl9527.cn"
+  ]
+}
+# 重启docker 服务
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+# 查看镜像源是否配置成功
+ docker info | grep -A 10 "Registry Mirrors"
+```
+
+test run container
+```sh
+sudo docker run hello-world
+sudo docker run -it ubuntu bash
+```
+
+###### 安装docker-cri
+https://mirantis.github.io/cri-dockerd/usage/install/
+
+两种方式安装 cri-docker
+- 
 
 
 
