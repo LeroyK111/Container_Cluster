@@ -1304,6 +1304,7 @@ kubeadm reset --cri-socket unix:///var/run/containerd/containerd.sock
 # 利用配置文件进行初始化 
 kubeadm init --config ~/kubeadm-config.yaml --upload-certs --v=9 
 ```
+这里有大坑, 可能是我使用hyper-v的原因.
 
 
 
