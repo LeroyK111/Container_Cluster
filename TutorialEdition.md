@@ -733,13 +733,35 @@ docker-cri 文档:  https://mirantis.github.io/cri-dockerd/usage/install/
 kubernetes 文档: https://kubernetes.io/zh-cn/docs/setup/
 
 ##### 环境准备
-三个 ubuntu 主机
+三个 ubuntu24 主机
+
+- 创建加载内核文件
+```sh
+cat << EOF | tee /etc/modules-load.d/k8s.conf
+> overlay
+> br_netfilter
+> EOF
+
+
+# 手动加载模块
+root@k8smaster:/home/k8smaster# modprobe overlay
+root@k8smaster:/home/k8smaster# modprobe br_netfilter
+
+# 查看已加载模块
+root@k8smaster:/home/k8smaster# lsmod |egrep "overlay"
+overlay               212992  0
+root@k8smaster:/home/k8smaster# lsmod |egrep "br_netfilter"
+br_netfilter           32768  0
+bridge                421888  1 br_netfilter
+```
 
 - 开启ipv4转发, 应用在 all node
 ```sh
 # 设置所需的 sysctl 参数，参数在重新启动后保持不变
 cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
 EOF
 
 # 应用 sysctl 参数而不重新启动
@@ -747,6 +769,36 @@ sudo sysctl --system
 
 # 使用以下命令验证 net.ipv4.ip_forward 是否设置为 1：
 sysctl net.ipv4.ip_forward
+```
+
+- 安装ipset和ipvsadm
+主要是从iptables转为nftables, 记得试用一下.
+```sh
+apt install ipset ipvsadm
+
+# 配置ipvsadm
+root@k8smaster:/home/k8smaster# cat << EOF | tee /etc/modules-load.d/ipvs.conf
+> ip_vs
+> ip_vs_rr
+> ip_vs_wrr
+> ip_vs_sh
+> nf_conntrack
+> EOF
+
+# 创建模块加载脚本
+cat <<EOF | tee ipvs.sh
+modprobe -- ip_vs
+modprobe -- ip_vs_rr
+modprobe -- ip_vs_wrr
+modprobe -- ip_vs_sh
+modprobe -- nf_conntrack
+EOF
+
+# 执行脚本
+sh ipvs.sh
+
+# 查看模块挂载情况
+lsmod | grep ip_vs
 ```
 
 - 关闭防护墙? 方便学习罢了
@@ -778,12 +830,38 @@ hostnamectl set-hostname k8smaster
 # 只有 master node 设置 vi /etc/hosts 文件
 # 直接用脚本追加
 cat >> /etc/hosts << EOF
-172.24.204.91 k8smaster
-172.24.199.145 k8sslave1
-172.24.194.94 k8sslave2
+172.28.128.190 k8smaster
+172.28.130.19 k8sslave1
+172.28.132.204 k8sslave2
 EOF
 ```
 ![](assets/Pasted%20image%2020240907215500.png)
+配置三个node的静态地址: 
+```sh
+vi /etc/netplan/50-cloud-init.yaml
+
+# This file is generated from information provided by the datasource.  Changes
+# to it will not persist across an instance reboot.  To disable cloud-init's
+# network configuration capabilities, write a file
+# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:
+# network: {config: disabled}
+network:
+    ethernets:
+        eth0:
+            dhcp4: no
+            addresses: 
+              - 172.28.128.190/20
+            routes:
+              - to: default
+                via: 172.28.143.255
+            nameservers:
+              addresses: [119.29.29.29,8.8.8.8,1.0.0.1]
+    version: 2
+
+# 配置立即生效
+netplan apply
+```
+
 
 - 配置流量转发
 ```sh
@@ -800,7 +878,11 @@ sudo sysctl --system
 - 检查时间同步配置( 如不同步, 则需要自己配置 )
 这里三台node 都是自动同步
 ![](assets/Pasted%20image%2020240907221555.png)
-##### 安装 docker 和 docker-cri
+
+##### 安装 docker 和 docker-cri  
+
+Containerd 也是docker的一个变种, 同样推荐. 安装docker时, 也会默认安装它.
+![](assets/Pasted%20image%2020240917173502.png)
 
 - 先检查 虚拟机的嵌套虚拟化 功能 是否开启.
 ```sh
@@ -828,6 +910,10 @@ microsoft
 	- 参考上述文档, 都可以实现 .deb 的下载安装
 - shell 脚本安装: https://docs.docker.com/engine/install/ubuntu/#install-using-the-convenience-script
 
+首先我们要卸载冲突版本
+```sh
+for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
+```
 ###### 采用 apt 安装 docker
 - 非特权用户对 docker container 的namespace 会出现问题. 建议使用以下命令
 ```sh
@@ -878,6 +964,7 @@ configure docker images source
 
 cat >> /etc/docker/daemon.json  << EOF
 {
+   "exec-opts": ["native.cgroupdriver=systemd"],
    "registry-mirrors": [
     "https://hub.uuuadc.top",
     "https://docker.anyhub.us.kg",
@@ -896,6 +983,10 @@ sudo systemctl daemon-reload
 sudo systemctl restart docker
 # 查看镜像源是否配置成功
  docker info | grep -A 10 "Registry Mirrors"
+
+## 默认启用
+sudo systemctl enable docker.service
+sudo systemctl enable containerd.service
 ```
 
 test run container
@@ -909,8 +1000,7 @@ https://mirantis.github.io/cri-dockerd/usage/install/
 
 两种方式安装 cri-docker
 - install 二进制文件直接安装 : https://github.com/Mirantis/cri-dockerd/releases 
-- 手动安装 Install Manually: 
-主要是会涉及到很多定制化安装, 我比较烦这个
+- 手动安装 Install Manually:  主要是会涉及到很多定制化安装, 我比较烦这个
 ```sh
 install -o root -g root -m 0755 cri-dockerd /usr/local/bin/cri-dockerd
 install packaging/systemd/* /etc/systemd/system
@@ -935,10 +1025,48 @@ sudo apt install ./Downloads/cri-dockerd_0.3.15.3-0.ubuntu-jammy_amd64.deb
 sudo systemctl daemon-reload
 sudo systemctl enable cri-docker.service
 sudo systemctl enable cri-docker.socket
+
 sudo systemctl start cri-docker.service
 sudo systemctl start cri-docker.socket
 #  查看服务
 sudo systemctl status cri-docker.service
+```
+
+##### 安装 containerd
+官网: https://containerd.io/
+安装地址: https://github.com/containerd/containerd/releases
+
+```sh
+wget https://github.com/containerd/containerd/releases/download/v1.7.22/cri-containerd-1.7.22-linux-amd64.tar.gz 
+```
+
+```sh
+tar xf cri-containerd-1.7.22-linux-amd64.tar.gz -C /
+
+# 检查是否安装成功
+root@k8sslave1:/home/k8sslave1# which containerd
+/usr/bin/containerd
+root@k8sslave1:/home/k8sslave1# which runc
+/usr/bin/runc
+```
+
+###### containerd配置文件
+
+```sh
+mkdir /etc/containerd
+# 生成配置文件
+containerd config default > /etc/containerd/config.toml
+# 修改配置文件
+vi /etc/containerd/config.toml
+# 67row
+sandbox_image = "registry.k8s.io/pause:3.9"
+# 139row
+SystemdCgroup = true
+```
+
+开机自启动并且立即启动
+```sh
+systemctl enable --now containerd
 ```
 
 
@@ -989,10 +1117,27 @@ echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
 ```shell
 sudo apt update
 sudo apt install -y kubelet kubeadm kubectl
+# 版本锁定
 sudo apt-mark hold kubelet kubeadm kubectl
+# 解锁 sudo apt-mark unhold kubelet kubeadm kubectl
+
+
+```
+
+加入配置
+```sh
+root@k8smaster:/etc/containerd# vi /etc/default/kubelet 
+root@k8smaster:/etc/containerd# cat /etc/default/kubelet 
+KUBELET_EXTRA_ARGS=
+KUBELET_CGROUP_ARGS="--cgroup-driver=systemd"
 
 # 设置开机启动
 systemctl enable kubelet
+```
+
+```sh
+# vi /etc/crictl.yaml
+runtime-endpoint: unix:///var/run/containerd/containerd.sock 
 ```
 
 ###### 配置cgroup驱动
@@ -1018,108 +1163,180 @@ kubeadm init --config /var/lib/kubelet/config.yaml
 ###### master node 初始化控制器节点
 https://kubernetes.io/zh-cn/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
 目前我们以单控制节点为例. 
+
 如果要实现高可用, 多控制节点, 后续会补充复杂构建.
 ```
-172.24.204.91 k8smaster
-172.24.199.145 k8sslave1
-172.24.194.94 k8sslave2
+172.28.128.190 k8smaster
+172.28.130.19 k8sslave1
+172.28.132.204 k8sslave2
 ```
 
-最简操作:
 ```sh
-kubeadm init --apiserver-advertise-address=172.24.204.91 \
---kubernetes-version=v1.31.0 \
---service-cidr=10.96.0.0/12 \
---pod-network-cidr=10.244.0.0/16 \
---cri-socket=unix:///var/run/cri-dockerd.sock \
---image-repository=registry.aliyuncs.com/google_containers \
---ignore-preflight-errors=FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml,FileAvailable--etc-kubernetes-manifests-kube-controller-manager.yaml,FileAvailable--etc-kubernetes-manifests-kube-scheduler.yaml,FileAvailable--etc-kubernetes-manifests-etcd.yaml,Port-10250
+root@k8smaster:/etc/containerd# kubeadm version
+kubeadm version: &version.Info{Major:"1", Minor:"31", GitVersion:"v1.31.0", GitCommit:"9edcffcde5595e8a5b1a35f88c421764e575afce", GitTreeState:"clean", BuildDate:"2024-08-13T07:35:57Z", GoVersion:"go1.22.5", Compiler:"gc", Platform:"linux/amd64"}
+
+# 生成配置文件
+root@k8smaster:~# kubeadm config print init-defaults > kubeadm-config.yaml
+root@k8smaster:~# ls
+kubeadm-config.yaml  snap
+```
+
+
+最简操作:  kubeadm-config.yaml 
+
+```sh
+root@k8smaster:~# cat kubeadm-config.yaml 
+apiVersion: kubeadm.k8s.io/v1beta4
+bootstrapTokens:
+- groups:
+  - system:bootstrappers:kubeadm:default-node-token
+  token: abcdef.0123456789abcdef
+  ttl: 24h0m0s
+  usages:
+  - signing
+  - authentication
+kind: InitConfiguration
+localAPIEndpoint:
+  # master 节点绝对地址
+  advertiseAddress: 172.28.128.190
+  bindPort: 6443
+nodeRegistration:
+  # cri 接口类型
+  criSocket: unix:///var/run/containerd/containerd.sock
+  imagePullPolicy: IfNotPresent
+  imagePullSerial: true
+  # 名字
+  name: k8smaster
+  taints: null
+timeouts:
+  controlPlaneComponentHealthCheck: 4m0s
+  discovery: 5m0s
+  etcdAPICall: 2m0s
+  kubeletHealthCheck: 4m0s
+  kubernetesAPICall: 1m0s
+  tlsBootstrap: 5m0s
+  upgradeManifests: 5m0s
+---
+apiServer: {}
+apiVersion: kubeadm.k8s.io/v1beta4
+caCertificateValidityPeriod: 87600h0m0s
+certificateValidityPeriod: 8760h0m0s
+certificatesDir: /etc/kubernetes/pki
+clusterName: kubernetes
+controllerManager: {}
+dns: {}
+encryptionAlgorithm: RSA-2048
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+# 替换成阿里
+# registry.aliyuncs.com/google_containers
+imageRepository: registry.k8s.io
+kind: ClusterConfiguration
+kubernetesVersion: 1.31.0
+networking:
+  dnsDomain: cluster.local
+  # 服务资源地址
+  serviceSubnet: 10.96.0.0/12
+  # pod 组网CNI插件地址范围 一般都是Fiannel 每个node都会从这里分配一个子网, node中的每个pod都会分配一个ip
+  podSubnet: 10.244.0.0/16
+proxy: {}
+scheduler: {}
+```
+
+k8s 镜像社区
+```
+# 查看社区镜像
+root@k8smaster:~# kubeadm config images list 
+registry.k8s.io/kube-apiserver:v1.31.0
+registry.k8s.io/kube-controller-manager:v1.31.0
+registry.k8s.io/kube-scheduler:v1.31.0
+registry.k8s.io/kube-proxy:v1.31.0
+registry.k8s.io/coredns/coredns:v1.11.1
+registry.k8s.io/pause:3.10
+registry.k8s.io/etcd:3.5.15-0
+
+
+# 拉取社区镜像, 强行指定--cri-socket 为 containerd 不然docker会干涉这个容器基座
+kubeadm config images pull --image-repository registry.aliyuncs.com/google_containers --cri-socket unix:///var/run/containerd/containerd.sock
+
+# crictl 可以使用了
+root@k8smaster:~# crictl images
+IMAGE                                                             TAG                 IMAGE ID            SIZE
+registry.aliyuncs.com/google_containers/coredns                   v1.11.1             cbb01a7bd410d       18.2MB
+registry.aliyuncs.com/google_containers/etcd                      3.5.15-0            2e96e5913fc06       56.9MB
+registry.aliyuncs.com/google_containers/kube-apiserver            v1.31.0             604f5db92eaa8       28.1MB
+registry.aliyuncs.com/google_containers/kube-controller-manager   v1.31.0             045733566833c       26.2MB
+registry.aliyuncs.com/google_containers/kube-proxy                v1.31.0             ad83b2ca7b09e       30.2MB
+registry.aliyuncs.com/google_containers/kube-scheduler            v1.31.0             1766f54c897f0       20.2MB
+registry.aliyuncs.com/google_c
+
+
+# 记得重新标记镜像名
+# 标记 kube-apiserver
+sudo ctr -n k8s.io image tag registry.aliyuncs.com/google_containers/kube-apiserver:v1.31.0 registry.k8s.io/kube-apiserver:v1.31.0
+
+# 标记 kube-controller-manager
+sudo ctr -n k8s.io image tag registry.aliyuncs.com/google_containers/kube-controller-manager:v1.31.0 registry.k8s.io/kube-controller-manager:v1.31.0
+
+# 标记 kube-scheduler
+sudo ctr -n k8s.io image tag registry.aliyuncs.com/google_containers/kube-scheduler:v1.31.0 registry.k8s.io/kube-scheduler:v1.31.0
+
+# 标记 kube-proxy
+sudo ctr -n k8s.io image tag registry.aliyuncs.com/google_containers/kube-proxy:v1.31.0 registry.k8s.io/kube-proxy:v1.31.0
+
+# 标记 etcd
+sudo ctr -n k8s.io image tag registry.aliyuncs.com/google_containers/etcd:3.5.15-0 registry.k8s.io/etcd:3.5.15-0
+
+# 标记 coredns
+sudo ctr -n k8s.io image tag registry.aliyuncs.com/google_containers/coredns:v1.11.1 registry.k8s.io/coredns/coredns:v1.11.1
+
+
+# 标记 pause
+sudo ctr -n k8s.io image tag registry.aliyuncs.com/google_containers/pause:3.10 registry.k8s.io/pause:3.10
 
 ```
-- --pod-network-cidr: pod 组网CNI插件地址范围 一般都是Fiannel 每个node都会从这里分配一个子网, node中的每个pod都会分配一个ip
-- --service-cidr: 虚拟路由器网段 
-- --kubernetes-version:  k8s版本
-- --image-repository `mirror.ccs.tencentyun.com/google_containers \` 镜像拉取地址
-- --apiserver-advertise-address: master地址
--  --cri-socket unix:///var/run/cri-dockerd.sock
-- --ignore-preflight-errors= 出现问题, 你可以忽略问题
+
+```sh
+# 清理之前的初始化
+kubeadm reset --cri-socket unix:///var/run/containerd/containerd.sock
+
+# 利用配置文件进行初始化 
+kubeadm init --config ~/kubeadm-config.yaml --upload-certs --v=9 
+```
+
+
+
+
+
+
+
+
+
+
 
 ###### 🕳如何解决坑?
 
-- 初始化失败?
+说明 --cri-socket 没有指定好
 ```sh
-root@k8smaster:/home/k8smaster# kubeadm init --apiserver-advertise-address=172.24.204.91 \ --kubernetes-version v1.31.0 \ --service-cidr=10.96.0.0/12 \ --pod-network-cidr=10.244.0.0/16 \ --cri-socket unix:///var/run/cri-dockerd.sock \ --image-repository registry.aliyuncs.com/google_containers [init] Using Kubernetes version: v1.31.0 [preflight] Running pre-flight checks error execution phase preflight: [preflight] Some fatal errors occurred: [ERROR FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml]: /etc/kubernetes/manifests/kube-apiserver.yaml already exists [ERROR FileAvailable--etc-kubernetes-manifests-kube-controller-manager.yaml]: /etc/kubernetes/manifests/kube-controller-manager.yaml already exists [ERROR FileAvailable--etc-kubernetes-manifests-kube-scheduler.yaml]: /etc/kubernetes/manifests/kube-scheduler.yaml already exists [ERROR FileAvailable--etc-kubernetes-manifests-etcd.yaml]: /etc/kubernetes/manifests/etcd.yaml already exists [ERROR Port-10250]: Port 10250 is in use [preflight] If you know what you are doing, you can make a check non-fatal with `--ignore-preflight-errors=...` To see the stack trace of this error execute with --v=5 or higher
-
-# 直接init
-kubeadm reset --cri-socket unix:///var/run/cri-dockerd.sock
-
-root@k8smaster:/home/k8smaster# kubeadm reset --cri-socket unix:///var/run/cri-dockerd.sock
-[reset] Reading configuration from the cluster...
-[reset] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
-W0909 02:07:21.974946    5694 reset.go:123] [reset] Unable to fetch the kubeadm-config ConfigMap from cluster: failed to get config map: Get "https://172.24.204.91:6443/api/v1/namespaces/kube-system/configmaps/kubeadm-config?timeout=10s": dial tcp 172.24.204.91:6443: connect: connection refused
-W0909 02:07:21.975044    5694 preflight.go:56] [reset] WARNING: Changes made to this host by 'kubeadm init' or 'kubeadm join' will be reverted.
-[reset] Are you sure you want to proceed? [y/N]: y
-[preflight] Running pre-flight checks
-W0909 02:07:24.308719    5694 removeetcdmember.go:106] [reset] No kubeadm config, using etcd pod spec to get data directory
-[reset] Stopping the kubelet service
-[reset] Unmounting mounted directories in "/var/lib/kubelet"
-[reset] Deleting contents of directories: [/etc/kubernetes/manifests /var/lib/kubelet /etc/kubernetes/pki]
-[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/super-admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]
-
-The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
-
-The reset process does not reset or clean up iptables rules or IPVS tables.
-If you wish to reset iptables, you must do so manually by using the "iptables" command.
-
-If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
-to reset your system's IPVS tables.
-
-The reset process does not clean your kubeconfig files and you must remove them manually.
-Please, check the contents of the $HOME/.kube/config file.
-```
-可以继续init了
-
-- api server 启动失败
-```sh
-[api-check] The API server is not healthy after 4m0.000106119s
-
-Unfortunately, an error has occurred:
-	context deadline exceeded
-
-This error is likely caused by:
-	- The kubelet is not running
-	- The kubelet is unhealthy due to a misconfiguration of the node in some way (required cgroups disabled)
-
-If you are on a systemd-powered system, you can try to troubleshoot the error with the following commands:
-	- 'systemctl status kubelet'
-	- 'journalctl -xeu kubelet'
-
-Additionally, a control plane component may have crashed or exited when started by the container runtime.
-To troubleshoot, list all containers using your preferred container runtimes CLI.
-Here is one example how you may list all running Kubernetes containers by using crictl:
-	- 'crictl --runtime-endpoint unix:///var/run/cri-dockerd.sock ps -a | grep kube | grep -v pause'
-	Once you have found the failing container, you can inspect its logs with:
-	- 'crictl --runtime-endpoint unix:///var/run/cri-dockerd.sock logs CONTAINERID'
-error execution phase wait-control-plane: could not initialize a Kubernetes cluster
+root@k8smaster:~# kubeadm config images pull
+found multiple CRI endpoints on the host. Please define which one do you wish to use by setting the 'criSocket' field in the kubeadm configuration file: unix:///var/run/containerd/containerd.sock, unix:///var/run/cri-dockerd.sock
 To see the stack trace of this error execute with --v=5 or higher
 
+# 重启containerd
+systemctl daemon-reload 
+systemctl restart containerd
 ```
 
-```
-crictl --runtime-endpoint unix:///var/run/cri-dockerd.sock ps -a | grep kube | grep -v pause
-```
+还有超时问题, 国内干运维真的扯
+```sh
+root@k8smaster:~# kubeadm config images pull --cri-socket unix:///var/run/containerd/containerd.sock
+failed to pull image "registry.k8s.io/kube-apiserver:v1.31.0": failed to pull image registry.k8s.io/kube-apiserver:v1.31.0: rpc error: code = DeadlineExceeded desc = failed to pull and unpack image "registry.k8s.io/kube-apiserver:v1.31.0": failed to resolve reference "registry.k8s.io/kube-apiserver:v1.31.0": failed to do request: Head "https://europe-west2-docker.pkg.dev/v2/k8s-artifacts-prod/images/kube-apiserver/manifests/v1.31.0": dial tcp 64.233.189.82:443: i/o timeout
+To see the stack trace of this error execute with --v=5 or higher
 
-9月 09 02:58:28 k8smaster kubelet[4658]: E0909 02:58:28.809511    4658 log.go:32] "RunPodSandbox from runtime service failed" err="rpc error: code = U>
-9月 09 02:58:28 k8smaster kubelet[4658]: E0909 02:58:28.809575    4658 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: c>
-9月 09 02:58:28 k8smaster kubelet[4658]: E0909 02:58:28.809594    4658 kuberuntime_manager.go:1168] "CreatePodSandbox for pod failed" err="rpc error: >
-9月 09 02:58:28 k8smaster kubelet[4658]: E0909 02:58:28.809640    4658 pod_workers.go:1301] "Error syncing pod, skipping" err="failed to \"CreatePodSa>
-9月 09 02:58:31 k8smaster kubelet[4658]: E0909 02:58:31.060484    4658 event.go:368] "Unable to write event (may retry after sleeping)" err="Post \"ht>
-9月 09 02:58:32 k8smaster kubelet[4658]: E0909 02:58:32.114067    4658 eviction_manager.go:285] "Eviction manager: failed to get summary stats" err="f>
-9月 09 02:58:33 k8smaster kubelet[4658]: E0909 02:58:33.732131    4658 controller.go:145] "Failed to ensure lease exists, will retry" err="Get \"https>
-9月 09 02:58:33 k8smaster kubelet[4658]: I0909 02:58:33.901829    4658 kubelet_node_status.go:72] "Attempting to register node" node="k8smaster"
-9月 09 02:58:33 k8smaster kubelet[4658]: E0909 02:58:33.902037    4658 kubelet_node_status.go:95] "Unable to register node with API server" err="Post >
- k8s.io/client-go/informers/factory.go:160: failed to list *v1>
-Unhandled Error" err="k8s.io/client-go/informers/factory.go:>
+# 直接指定镜像源
+kubeadm config images pull --image-repository registry.aliyuncs.com/google_containers --cri-socket unix:///var/run/containerd/containerd.sock
+```
 
 
 
@@ -1128,6 +1345,7 @@ Unhandled Error" err="k8s.io/client-go/informers/factory.go:>
 Helm原理
 
 Helm模板
+
 
 
 ### 常用运维方式
