@@ -36,7 +36,7 @@ KVM
 hyper-V 是完整的硬件有虚拟化, 可以拥有完整虚拟机. 实现完整的系统功能, 必须学习K8S中的node时, 就可以使用.
 
  WSL-2 则是内核兼容层面的虚拟化, 可以执行linux相关的命令, 但是无法作为独立的node节点去使用. 比如 windows docker 就是这样实现的. linux功能阉割的比较多.
-### 启用 Hyper-V 功能
+### ~~启用 Hyper-V 功能~~(win11存在bug, 勿用这个虚拟机)
 ![](assets/Pasted%20image%2020240905011531.png)
 也可以使用管理员命令启动.
 ![](assets/Pasted%20image%2020240905011541.png)

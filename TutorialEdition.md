@@ -738,9 +738,9 @@ kubernetes 文档: https://kubernetes.io/zh-cn/docs/setup/
 - 创建加载内核文件
 ```sh
 cat << EOF | tee /etc/modules-load.d/k8s.conf
-> overlay
-> br_netfilter
-> EOF
+overlay
+br_netfilter
+EOF
 
 
 # 手动加载模块
@@ -771,19 +771,29 @@ sudo sysctl --system
 sysctl net.ipv4.ip_forward
 ```
 
+- 安装常用工具
+```sh
+apt install update
+apt install upgrade
+
+apt install net-tools openssh-server git wget curl make cmake ipset ipvsadm vim
+sudo systemctl enable ssh
+sudo systemctl start ssh
+```
+
+现在我们可以使用ssh工具链接虚拟机了
+
 - 安装ipset和ipvsadm
 主要是从iptables转为nftables, 记得试用一下.
 ```sh
-apt install ipset ipvsadm
-
 # 配置ipvsadm
 root@k8smaster:/home/k8smaster# cat << EOF | tee /etc/modules-load.d/ipvs.conf
-> ip_vs
-> ip_vs_rr
-> ip_vs_wrr
-> ip_vs_sh
-> nf_conntrack
-> EOF
+ip_vs
+ip_vs_rr
+ip_vs_wrr
+ip_vs_sh
+nf_conntrack
+EOF
 
 # 创建模块加载脚本
 cat <<EOF | tee ipvs.sh
@@ -837,6 +847,7 @@ EOF
 ```
 ![](assets/Pasted%20image%2020240907215500.png)
 配置三个node的静态地址: 
+对于hyper-v虚拟机而言, 就不要配置了.
 ```sh
 vi /etc/netplan/50-cloud-init.yaml
 
@@ -879,10 +890,6 @@ sudo sysctl --system
 这里三台node 都是自动同步
 ![](assets/Pasted%20image%2020240907221555.png)
 
-##### 安装 docker 和 docker-cri  
-
-Containerd 也是docker的一个变种, 同样推荐. 安装docker时, 也会默认安装它.
-![](assets/Pasted%20image%2020240917173502.png)
 
 - 先检查 虚拟机的嵌套虚拟化 功能 是否开启.
 ```sh
@@ -899,6 +906,12 @@ lsmod | grep kvm
 root@k8sslave2:/home/k8sslave2# systemd-detect-virt
 microsoft
 ```
+
+
+##### 安装 docker 和 docker-cri  
+
+Containerd 也是docker的一个变种, 同样推荐. 安装docker时, 也会默认安装它.
+![](assets/Pasted%20image%2020240917173502.png)
 
 存在三种安装方式: https://docs.docker.com/engine/install/ubuntu/#installation-methods
 - apt 安装:  以下我们采用这种方法安装 docker 
@@ -1116,7 +1129,7 @@ echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
 
 ```shell
 sudo apt update
-sudo apt install -y kubelet kubeadm kubectl
+sudo apt install -y kubelet=1.31.0-1.1 kubeadm=1.31.0-1.1 kubectl=1.31.0-1.1
 # 版本锁定
 sudo apt-mark hold kubelet kubeadm kubectl
 # 解锁 sudo apt-mark unhold kubelet kubeadm kubectl
@@ -1128,8 +1141,8 @@ sudo apt-mark hold kubelet kubeadm kubectl
 ```sh
 root@k8smaster:/etc/containerd# vi /etc/default/kubelet 
 root@k8smaster:/etc/containerd# cat /etc/default/kubelet 
-KUBELET_EXTRA_ARGS=
-KUBELET_CGROUP_ARGS="--cgroup-driver=systemd"
+KUBELET_EXTRA_ARGS="--cgroup-driver=systemd"
+
 
 # 设置开机启动
 systemctl enable kubelet
@@ -1302,19 +1315,11 @@ sudo ctr -n k8s.io image tag registry.aliyuncs.com/google_containers/pause:3.10 
 kubeadm reset --cri-socket unix:///var/run/containerd/containerd.sock
 
 # 利用配置文件进行初始化 
-kubeadm init --config ~/kubeadm-config.yaml --upload-certs --v=9 
+kubeadm init --config ./kubeadm-config.yaml --upload-certs --v=9 
 ```
-这里有大坑, 可能是我使用hyper-v的原因.
-
-
-
-
-
-
-
-
-
-
+这里有大坑, 就是因为使用hyper-v的原因.
+![](assets/Pasted%20image%2020240921210434.png)
+可以看到api服务无法启动, 这就是hyper-v的不支持导致的. 
 
 ###### 🕳如何解决坑?
 
@@ -1341,6 +1346,154 @@ kubeadm config images pull --image-repository registry.aliyuncs.com/google_conta
 
 
 
+
+看到这里就成功了.
+![](assets/Pasted%20image%2020240921231629.png)
+
+调用kubectl默认命令
+```sh
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# root下, 可以只运行这一条命令
+export KUBECONFIG=/etc/kubernetes/admin.conf
+```
+
+###### 基本指令
+```sh
+# 查看所有的nodes服务器
+kubectl get nodes
+```
+
+![](assets/Pasted%20image%2020240921232945.png)
+
+
+```sh
+# 其他node节点, 加入master管理
+kubeadm join 192.168.10.140:6443 --token abcdef.0123456xxxxxx --discovery-token-ca-cert-hash sha256:xxxxx.....
+```
+
+
+```sh
+# 老方法
+kubectl get cs
+# 查看组件状态 新方法
+kubectl get pods -n kube-system -o wide
+
+NAME                                 READY   STATUS    RESTARTS   AGE
+etcd-k8smaster                       1/1     Running   0          10m
+kube-apiserver-k8smaster             1/1     Running   0          10m
+kube-controller-manager-k8smaster    1/1     Running   0          10m
+kube-scheduler-k8smaster             1/1     Running   0          10m
+```
+
+![](assets/Pasted%20image%2020240921234517.png)
+
+```sh
+# 静态的kube
+ls /etc/kubernetes/manifeste/
+```
+
+##### CNI插件(pod网络插件)
+可以看到有两个节点没有准备好, 则无法调度他们
+![](assets/Pasted%20image%2020240921234847.png)
+这是由于pod网络插件未部署, 导致的.
+
+各种网络插件: https://kubernetes.io/docs/concepts/cluster-administration/addons/#networking-and-network-policy
+
+常用的一般是[Flannel](https://github.com/flannel-io/flannel#deploying-flannel-manually) , Calico, Cilium
+
+###### Calico 部署
+https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
+- yaml部署
+- operator部署
+
+安装Tigera Calico操作符和自定义资源定义。
+```sh
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.2/manifests/tigera-operator.yaml
+```
+![](assets/Pasted%20image%2020240922002109.png)
+
+下载calico的配置文件
+```sh
+wget https://raw.githubusercontent.com/projectcalico/calico/v3.28.2/manifests/custom-resources.yaml
+# 修改配置文件
+vi custom-resources.yaml
+# 修改成为pod的网络
+cidr: 10.244.0.0/16
+```
+![](assets/Pasted%20image%2020240922002442.png)
+通过创建必要的自定义资源来安装Calico。有关此清单中可用的配置选项的更多信息，
+```sh
+kubectl create -f custom-resources.yaml
+```
+![](assets/Pasted%20image%2020240922002705.png)
+
+- 这样一来nodes就可以被调度了
+![](assets/Pasted%20image%2020240922002903.png)
+
+##### 域名服务组件 Coredns
+
+![](assets/Pasted%20image%2020240922003409.png)
+
+测试dns服务组件, 能否解析这个域名
+![](assets/Pasted%20image%2020240922003533.png)
+偶尔出现问题, 可以选择注释nameserver, 添加其他dns服务器 8.8.8.8
+![](assets/Pasted%20image%2020240922003612.png)
+
+###### 部署nginx
+
+```sh
+vi nginx.yaml
+# 通过 `kubectl get deployments` 可以查看集群中的 `Deployment` 资源，它们负责管理和控制对应pod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginxweb
+spec:
+  selector:
+    matchLabels:
+      app: nginxweb1
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginxweb1
+    spec:
+      containers:
+        - name: nginxwebc
+          image: nginx:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+---
+# service 资源配置 将pod公开
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginxweb-service
+spec:
+  externalTrafficPolicy: Cluster
+  selector:
+    app: nginxweb1
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+  type: NodePort
+
+```
+直接部署
+```sh
+kubectl apply -f nginx.yaml
+```
+![](assets/Pasted%20image%2020240922004443.png)
+
+然后就可以通过其他 nodes 的ip 访问这个暴露的端口了
+
 ### HELM 包管理器
 
 Helm原理
@@ -1351,7 +1504,85 @@ Helm模板
 
 ### 常用运维方式
 
+#### k8s 常用命令
+http://docs.kubernetes.org.cn/
+https://www.kubernetes.org.cn/docs
 
+| **类别**           | **命令**                                                                              | **说明**                                       |
+| ---------------- | ----------------------------------------------------------------------------------- | -------------------------------------------- |
+| **基础命令**         | `kubectl version`                                                                   | 显示 kubectl 客户端和服务器版本信息                       |
+|                  | `kubectl cluster-info`                                                              | 显示集群的集群信息                                    |
+|                  | `kubectl api-resources`                                                             | 列出集群中所有可用的 API 资源                            |
+|                  | `kubectl get namespaces`                                                            | 列出所有命名空间                                     |
+|                  | `kubectl config get-contexts`                                                       | 列出所有可用的 kubectl 上下文                          |
+|                  | `kubectl config use-context <context_name>`                                         | 切换到指定的 kubectl 上下文                           |
+| **资源管理**         | `kubectl get all --all-namespaces`                                                  | 列出所有命名空间的所有资源                                |
+|                  | `kubectl get pods --namespace=<namespace>`                                          | 列出特定命名空间中的所有 Pod                             |
+|                  | `kubectl get deployment <deployment_name> -o yaml`                                  | 以 YAML 格式显示特定 Deployment 的详情                 |
+|                  | `kubectl get services --namespace=<namespace>`                                      | 列出特定命名空间中的所有服务                               |
+|                  | `kubectl get ingress --all-namespaces`                                              | 列出所有命名空间中的所有 Ingress                         |
+| **创建资源**         | `kubectl create deployment <deployment_name> --image=<image>`                       | 创建一个新的 Deployment 并指定镜像                      |
+|                  | `kubectl create service clusterip <service_name> --tcp=8080:80`                     | 创建一个 ClusterIP 服务                            |
+|                  | `kubectl create secret generic <secret_name> --from-literal=<key>=<value>`          | 创建一个通用的 Secret                               |
+|                  | `kubectl create configmap <configmap_name> --from-file=<file_path>`                 | 从文件创建一个 ConfigMap                            |
+|                  | `kubectl run <pod_name> --image=<image>`                                            | 从指定镜像启动一个 Pod                                |
+| **删除资源**         | `kubectl delete pod <pod_name>`                                                     | 删除特定 Pod                                     |
+|                  | `kubectl delete service <service_name>`                                             | 删除指定服务                                       |
+|                  | `kubectl delete deployment <deployment_name>`                                       | 删除指定 Deployment                              |
+|                  | `kubectl delete namespace <namespace_name>`                                         | 删除指定命名空间                                     |
+|                  | `kubectl delete all --all --namespace=<namespace>`                                  | 删除指定命名空间下的所有资源                               |
+| **描述和查看详情**      | `kubectl describe pod <pod_name>`                                                   | 查看 Pod 的详细信息                                 |
+|                  | `kubectl describe service <service_name>`                                           | 查看服务的详细信息                                    |
+|                  | `kubectl describe deployment <deployment_name>`                                     | 查看 Deployment 的详细信息                          |
+|                  | `kubectl describe node <node_name>`                                                 | 查看节点的详细信息                                    |
+|                  | `kubectl describe ingress <ingress_name>`                                           | 查看 Ingress 的详细信息                             |
+| **日志和调试**        | `kubectl logs <pod_name>`                                                           | 查看 Pod 的日志                                   |
+|                  | `kubectl logs <pod_name> -c <container_name>`                                       | 查看指定容器的日志                                    |
+|                  | `kubectl logs --previous <pod_name>`                                                | 查看 Pod 前一个实例的日志                              |
+|                  | `kubectl exec <pod_name> -- <command>`                                              | 在 Pod 内运行指定命令                                |
+|                  | `kubectl port-forward pod/<pod_name> 8080:80`                                       | 将本地端口转发到 Pod 中的端口                            |
+|                  | `kubectl debug node/<node_name> --image=busybox`                                    | 调试节点，使用指定镜像启动调试容器                            |
+| **滚动更新和回滚**      | `kubectl set image deployment/<deployment_name> <container_name>=<new_image>`       | 更新 Deployment 中容器的镜像版本                       |
+|                  | `kubectl rollout restart deployment/<deployment_name>`                              | 重启 Deployment                                |
+|                  | `kubectl rollout status deployment/<deployment_name>`                               | 查看 Deployment 的滚动更新状态                        |
+|                  | `kubectl rollout undo deployment/<deployment_name>`                                 | 回滚 Deployment 到之前的版本                         |
+| **扩展与缩减**        | `kubectl scale deployment <deployment_name> --replicas=<num>`                       | 手动扩展或缩减 Deployment 的副本数量                     |
+|                  | `kubectl autoscale deployment <deployment_name> --min=2 --max=5 --cpu-percent=80`   | 设置 HPA（水平 Pod 自动扩展），根据 CPU 使用情况动态调整 Pod 副本数量 |
+| **资源导出与备份**      | `kubectl get <resource> -o yaml > <file.yaml>`                                      | 将资源导出为 YAML 文件                               |
+|                  | `kubectl get <resource> -o json > <file.json>`                                      | 将资源导出为 JSON 文件                               |
+|                  | `kubectl apply -f <file>`                                                           | 应用指定文件中的资源配置                                 |
+| **资源更新**         | `kubectl edit <resource_type> <resource_name>`                                      | 使用默认编辑器编辑指定资源                                |
+|                  | `kubectl patch <resource_type> <resource_name> --patch '{"key":"value"}'`           | 使用 JSON 格式补丁更新资源                             |
+| **事件查看与监控**      | `kubectl get events --sort-by=.metadata.creationTimestamp`                          | 查看按时间排序的事件                                   |
+|                  | `kubectl get events -n <namespace>`                                                 | 查看特定命名空间的事件                                  |
+| **Node 节点管理**    | `kubectl drain <node_name>`                                                         | 驱逐节点上的 Pod，用于维护                              |
+|                  | `kubectl cordon <node_name>`                                                        | 标记节点为不可调度状态                                  |
+|                  | `kubectl uncordon <node_name>`                                                      | 取消节点的不可调度状态                                  |
+| **ConfigMap 管理** | `kubectl get configmaps`                                                            | 查看集群中的 ConfigMap                             |
+|                  | `kubectl describe configmap <configmap_name>`                                       | 查看特定 ConfigMap 的详细信息                         |
+|                  | `kubectl create configmap <configmap_name> --from-literal=<key>=<value>`            | 创建 ConfigMap，从键值对创建                          |
+| **Secrets 管理**   | `kubectl get secrets`                                                               | 查看集群中的 Secret                                |
+|                  | `kubectl describe secret <secret_name>`                                             | 查看指定 Secret 的详细信息                            |
+|                  | `kubectl create secret tls <secret_name> --cert=<path_to_cert> --key=<path_to_key>` | 创建 TLS Secret                                |
+| **Network 管理**   | `kubectl get services`                                                              | 查看所有服务                                       |
+|                  | `kubectl describe service <service_name>`                                           | 查看指定服务的详细信息                                  |
+|                  | `kubectl get ingress`                                                               | 查看所有 Ingress 资源                              |
+| **存储管理**         | `kubectl get pvc`                                                                   | 查看所有 PersistentVolumeClaim                   |
+|                  | `kubectl describe pvc <pvc_name>`                                                   | 查看指定 PVC 的详细信息                               |
+| **Helm 集成**      | `helm install <release_name> <chart>`                                               | 使用 Helm 安装 Chart                             |
+|                  | `helm list`                                                                         | 列出所有 Helm 释放                                 |
+|                  | `helm upgrade <release_name> <chart>`                                               | 升级指定 Helm 释放                                 |
+|                  | `helm uninstall <release_name>`                                                     | 卸载 Helm 释放                                   |
+| **资源命名空间管理**     | `kubectl get namespaces`                                                            | 列出所有命名空间                                     |
+|                  | `kubectl create namespace <namespace_name>`                                         | 创建命名空间                                       |
+|                  | `kubectl delete namespace <namespace_name>`                                         | 删除命名空间                                       |
+| **Pod 网络调试**     | `kubectl exec -it <pod_name> -- /bin/sh`                                            | 进入 Pod 的 shell                               |
+|                  | `kubectl port-forward svc/<service_name> 8080:80`                                   | 将服务端口转发到本地                                   |
+|                  | `kubectl get endpoints`                                                             | 查看服务的端点 IP 地址                                |
+| **角色和权限管理**      | `kubectl get roles --namespace=<namespace>`                                         | 列出命名空间内的角色                                   |
+|                  | `kubectl describe rolebinding <rolebinding_name>`                                   | 查看指定 RoleBinding 的详细信息                       |
+| **用户配置与凭证**      | `kubectl config set-context <context_name>`                                         | 设置当前 kubectl 使用的上下文                          |
+|                  | `kubectl config delete-context <context_name>`                                      | 删除指定上下文                                      |
 
 #### 源码修改
 
