@@ -997,6 +997,9 @@ sudo systemctl restart docker
 # 查看镜像源是否配置成功
  docker info | grep -A 10 "Registry Mirrors"
 
+# 使用kubernetes
+systemctl daemon-reload
+
 ## 默认启用
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
@@ -1007,6 +1010,12 @@ test run container
 sudo docker run hello-world
 sudo docker run -it ubuntu bash
 ```
+
+```sh
+# 升级docker 很容易
+apt upgrade docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
 
 ###### 安装docker-cri
 https://mirantis.github.io/cri-dockerd/usage/install/
@@ -1023,8 +1032,7 @@ systemctl enable --now cri-docker.socket
 ```
 cri配置文件
 
-![](assets/Pasted%20image%2020240908121125.png)
-![](assets/Pasted%20image%2020240908121147.png)
+`一般情况下 /etc/systemd/system/cri-docker.service 不用修改`
 
 选择二进制文件直接安装
 ```sh
@@ -1044,6 +1052,31 @@ sudo systemctl start cri-docker.socket
 #  查看服务
 sudo systemctl status cri-docker.service
 ```
+
+###### 老版方法
+
+- 问题一: cgroup driver 不是systemd
+```sh
+docker info|grep Driver
+```
+
+![](assets/Pasted%20image%2020240922210825.png)
+![](assets/Pasted%20image%2020240922210844.png)
+修改docker的管理模式
+```
+"exec-opts": ["native.cgroupdriver=systemd"]
+```
+![](assets/Pasted%20image%2020240922210907.png)
+![](assets/Pasted%20image%2020240922211436.png)
+
+- 问题二: init失败, 导致cni认证失败
+![](assets/Pasted%20image%2020240922211459.png)
+```
+# reset后,重新init
+kubeadm reset .....
+kubeadm init .....
+```
+![](assets/Pasted%20image%2020240922211856.png)
 
 ##### 安装 containerd
 官网: https://containerd.io/
@@ -1193,7 +1226,7 @@ root@k8smaster:~# kubeadm config print init-defaults > kubeadm-config.yaml
 root@k8smaster:~# ls
 kubeadm-config.yaml  snap
 ```
-
+推荐使用配置文件初始化init, 如下:
 
 最简操作:  kubeadm-config.yaml 
 
@@ -1220,6 +1253,7 @@ nodeRegistration:
   imagePullSerial: true
   # 名字
   name: k8smaster
+  # 污点
   taints: null
 timeouts:
   controlPlaneComponentHealthCheck: 4m0s
@@ -1239,6 +1273,7 @@ clusterName: kubernetes
 controllerManager: {}
 dns: {}
 encryptionAlgorithm: RSA-2048
+# etcd地址
 etcd:
   local:
     dataDir: /var/lib/etcd
@@ -1347,7 +1382,7 @@ kubeadm config images pull --image-repository registry.aliyuncs.com/google_conta
 
 
 
-看到这里就成功了.
+看到这里就成功了. 记得截图记录一下token
 ![](assets/Pasted%20image%2020240921231629.png)
 
 调用kubectl默认命令
@@ -1364,15 +1399,26 @@ export KUBECONFIG=/etc/kubernetes/admin.conf
 ```sh
 # 查看所有的nodes服务器
 kubectl get nodes
+kubectl get no
 ```
 
 ![](assets/Pasted%20image%2020240921232945.png)
 
 
 ```sh
+# 查看token是否过期
+kubeadm token list
+# 生成token
+kubeadm token create
+
 # 其他node节点, 加入master管理
 kubeadm join 192.168.10.140:6443 --token abcdef.0123456xxxxxx --discovery-token-ca-cert-hash sha256:xxxxx.....
 ```
+
+```sh
+# 获取完整的token 
+```
+![](assets/Pasted%20image%2020240922212607.png)
 
 
 ```sh
@@ -1395,6 +1441,9 @@ kube-scheduler-k8smaster             1/1     Running   0          10m
 ls /etc/kubernetes/manifeste/
 ```
 
+
+
+
 ##### CNI插件(pod网络插件)
 可以看到有两个节点没有准备好, 则无法调度他们
 ![](assets/Pasted%20image%2020240921234847.png)
@@ -1407,6 +1456,17 @@ ls /etc/kubernetes/manifeste/
 ###### Calico 部署
 https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
 - yaml部署
+```sh
+sed -i 's#docker.io/##g' calico.yaml
+```
+![](assets/Pasted%20image%2020240922214758.png)
+![](assets/Pasted%20image%2020240922215234.png)
+```sh
+# 查看详情.
+kubectl describe po xxxxx
+```
+
+
 - operator部署
 
 安装Tigera Calico操作符和自定义资源定义。
@@ -1422,6 +1482,7 @@ wget https://raw.githubusercontent.com/projectcalico/calico/v3.28.2/manifests/cu
 vi custom-resources.yaml
 # 修改成为pod的网络
 cidr: 10.244.0.0/16
+
 ```
 ![](assets/Pasted%20image%2020240922002442.png)
 通过创建必要的自定义资源来安装Calico。有关此清单中可用的配置选项的更多信息，
@@ -1430,8 +1491,15 @@ kubectl create -f custom-resources.yaml
 ```
 ![](assets/Pasted%20image%2020240922002705.png)
 
+```sh
+# 简写
+kubectl get po
+```
+
+
 - 这样一来nodes就可以被调度了
 ![](assets/Pasted%20image%2020240922002903.png)
+
 
 ##### 域名服务组件 Coredns
 
@@ -1442,7 +1510,12 @@ kubectl create -f custom-resources.yaml
 偶尔出现问题, 可以选择注释nameserver, 添加其他dns服务器 8.8.8.8
 ![](assets/Pasted%20image%2020240922003612.png)
 
+
+
+
 ###### 部署nginx
+
+- yaml文件部署
 
 ```sh
 vi nginx.yaml
@@ -1493,6 +1566,271 @@ kubectl apply -f nginx.yaml
 ![](assets/Pasted%20image%2020240922004443.png)
 
 然后就可以通过其他 nodes 的ip 访问这个暴露的端口了
+- 指令部署
+
+```sh
+kubectl create deployment nginx --image=nginx
+
+kubectl expose deployment nginx --port=80 --type=NodePort
+
+kubectl get pod,svc 
+
+# 所有的node与虚拟网段,都可以访问这个端口
+curl 192.168.113.120:30903
+```
+![](assets/Pasted%20image%2020240922220315.png)
+
+
+#### kubectl 详解
+
+##### 在任意节点使用kubectl.
+ - copy master节点上的admin.conf 文件到 其他服务器上
+ ![](assets/Pasted%20image%2020240922221018.png)
+![](assets/Pasted%20image%2020240922221129.png)
+
+##### apply
+
+`kubectl apply` 是Kubernetes 中用于将资源文件应用到集群的命令。管理kubernetes资源的核心命令之一, 可以创建,更新,配置资源. 常用于将yaml, json格式的资源定义文件部署到k8s中.
+
+```sh
+kubectl apply -f <file-path>
+kubectl apply -f deployment.yaml -f service.yaml
+kubectl apply -f https://k8s.io/examples/controllers/nginx-deployment.yaml
+kubectl apply -k ./kustomize/
+
+# 测试文件是否正确
+kubectl apply -f deployment.yaml --dry-run=client
+# 记录历史变动
+kubectl apply -f deployment.yaml --record
+# 递归文件夹中的配置
+kubectl apply -R -f ./my-configs/
+
+# 强制应用
+kubectl apply -f deployment.yaml --force
+# 获取应用状态
+kubectl get <resource-type> <resource-name>
+
+```
+##### autoscale
+本质就是HPA自动扩缩容.
+在 Kubernetes 中，`kubectl autoscale` 命令用于为现有的部署（Deployment）或其他控制器（如 ReplicaSet、StatefulSet）创建水平 Pod 自动扩缩容（Horizontal Pod Autoscaler，HPA）。HPA 会根据指定的指标（例如 CPU 利用率、内存利用率等）自动调整 Pod 的副本数量，以应对负载变化。
+
+```bash
+kubectl autoscale <resource> <name> --min=<min_replicas> --max=<max_replicas> --cpu-percent=<target_cpu_utilization>
+```
+
+- **`<resource>`**：要扩缩容的资源类型，例如 `deployment` 或 `replicaset`。
+- **`<name>`**：要扩缩容的资源的名称。
+- **`--min=<min_replicas>`**：指定最少的副本数量。
+- **`--max=<max_replicas>`**：指定最大的副本数量。
+- **`--cpu-percent=<target_cpu_utilization>`**：指定 CPU 的目标利用率（百分比）。
+
+
+```bash
+kubectl autoscale deployment nginx-deployment --min=2 --max=5 --cpu-percent=50
+```
+
+这个命令会为 `nginx-deployment` 部署创建一个水平 Pod 自动扩缩容器，设置 Pod 副本数的最小值为 2，最大值为 5，当 CPU 利用率超过 50% 时会增加 Pod 的副本数量。
+
+1. **`--min`**：
+   - 最少的副本数量，即自动扩缩容器会保证至少有这么多的 Pod 运行。
+
+2. **`--max`**：
+   - 最多的副本数量，自动扩缩容器可以增加副本数量，但不会超过该数量。
+
+3. **`--cpu-percent`**：
+   - 目标 CPU 利用率百分比。当平均 CPU 利用率高于设定的阈值时，自动扩缩容器会增加 Pod 副本数量。当低于阈值时，自动缩减 Pod 数量。
+
+
+- **处理高并发请求**：当负载波动较大时，例如有大量用户请求，HPA 可以自动增加 Pod 副本数量以提高服务的处理能力。
+- **降低成本**：在负载较低时，减少 Pod 数量，从而降低资源的占用，减少运行成本。
+
+创建 HPA 后，可以使用以下命令查看其状态：
+
+```bash
+kubectl get hpa
+```
+
+该命令会显示当前集群中的所有 HPA 及其监控的指标和副本数量等信息。
+
+除了使用 `kubectl autoscale` 命令，还可以使用 YAML 文件来创建 HPA。例如，为 `nginx-deployment` 创建一个 HPA：
+
+```yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 50
+```
+
+使用以下命令应用该配置：
+
+```bash
+kubectl apply -f hpa.yaml
+```
+
+在 Kubernetes 1.18 及以上版本中，可以使用 `autoscaling/v2` 或 `autoscaling/v2beta2` 版本的 HPA，允许基于更丰富的指标（如内存、定制指标）来扩缩容。例如：
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx-deployment
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: AverageValue
+        averageValue: 500Mi
+```
+
+在这个例子中，HPA 将根据 CPU 利用率和内存消耗来调整 Pod 的数量。
+
+如果不再需要自动扩缩容，可以使用以下命令删除 HPA：
+
+```bash
+kubectl delete hpa nginx-hpa
+```
+
+
+1. **创建 HPA**：
+   ```bash
+   kubectl autoscale deployment <deployment-name> --min=<min> --max=<max> --cpu-percent=<percent>
+   ```
+
+2. **查看 HPA**：
+   ```bash
+   kubectl get hpa
+   ```
+
+3. **查看详细信息**：
+   ```bash
+   kubectl describe hpa <hpa-name>
+   ```
+
+4. **删除 HPA**：
+   ```bash
+   kubectl delete hpa <hpa-name>
+   ```
+
+
+##### edit
+
+编辑现有资源配置. 通过使用kubectl edit 你可以直接修改运行中的kubernetes资源, 而无需应用新的yaml文件.
+
+```sh
+# 在线编辑资源
+kubectl edit <resource-type> <resource-name>
+kubectl edit deployment nginx-deployment
+# 指定命名空间
+kubectl edit deployment nginx-deployment -n my-namespace
+# 现有资源转配置文件
+kubectl edit deployment nginx-deployment -o yaml
+```
+与patch的区别
+
+- **`kubectl edit`**：使用文本编辑器直接编辑整个资源对象. 生产环境不推荐
+- **`kubectl patch`**：使用json或yaml补丁来修改特定字段, 适合用于脚本和自动化操作.
+
+```sh
+# 修改副本数
+kubectl patch deployment nginx-deployment -p '{"spec": {"replicas": 5}}'
+```
+
+##### label
+kubectl label 命令用于在 Kubernetes 中为资源（如 Pod、Node、Service、Deployment 等）添加、更新或删除标签。标签（label）是键值对，用于标识和选择 Kubernetes 资源。标签在 Kubernetes 中的应用非常广泛，主要用于管理、筛选和选择资源，便于自动化运维和编排。
+
+```sh
+kubectl label <resource-type> <resource-name> <label-key>=<label-value> [--overwrite]
+
+```
+
+- resource-type: 资源类型node pod service deployment
+- resource-name: 要标记的资源名称
+- label-key: 要更新的键值对 k=v 可以多个标签
+- --overwrite 强制覆盖重名标签
+
+```sh
+# 直接打标签
+kubectl label deployment nginx-deployment environment=production
+# 为app=nginx的所有pod打标签
+kubectl label pods -l app=nginx environment=production
+# 强制覆盖
+kubectl label deployment nginx-deployment environment=production --overwrite
+# 删除标签
+kubectl label deployment nginx-deployment environment --remove
+# 查看标签
+kubectl get pods -L environment
+# 查看更info
+kubectl describe pod <pod-name>
+# 通过组合标签来查找想要的pod
+kubectl get pods -l environment=production,tier=frontend
+```
+
+控制pod调度
+
+```sh
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+##### patch
+
+
+
+
+##### replace
+
+
+
+
+##### rollout
+
+
+
+##### scale
+
+
+##### set
+
+
+
+#### 污点和容忍值
+
+
 
 ### HELM 包管理器
 
