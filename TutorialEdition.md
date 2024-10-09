@@ -1791,26 +1791,42 @@ kubectl get pods -l environment=production,tier=frontend
 控制pod调度
 
 ```sh
-
-
+# 为node-1 添加 标签
+kubectl label nodes node-1 disktype=ssd
+# 为nginx-deployment标记信息
+kubectl label deployment nginx-deployment version=1.0
+# 强制覆盖标签去更新
+kubectl label deployment nginx-deployment version=2.0 --overwrite
 ```
 
+Deployment 控制器会检测到 `PodTemplate` 中的标签发生了变更，因此会自动执行滚动更新。滚动更新意味着旧的 Pod 会逐渐被删除，新的 Pod 会被创建, 直到所有的pod都是新版本为止.
 
 
-
-
-
-
-
-
-
-
-
+```sh
+# 查看更新状态
+kubectl rollout status deployment nginx-deployment
+```
 
 ##### patch
+是edit的高阶版本, 可以进行脚本化和自动化运维.
 
+```sh
+# 资源类型, 资源名, 字段, 参数说明
+kubectl patch <resource-type> <resource-name> -p '<patch-data>' [--type=<patch-type>]
 
+# 这里为nginx-deployment加入元标签
+kubectl patch deployment nginx-deployment -p '{"metadata": {"labels": {"environment": "production"}}}' --type=merge
 
+# 更新镜像版本
+kubectl patch deployment nginx-deployment -p '{"spec": {"template": {"spec": {"containers": [{"name": "nginx", "image": "nginx:1.16.1"}]}}}}'
+
+# 精确更新 
+kubectl patch pod my-pod -p '[{"op": "remove", "path": "/metadata/labels/environment"}]' --type=json
+
+# 添加端口
+kubectl patch service my-service -p '{"spec": {"ports": [{"port": 8080, "targetPort": 8081}]}}'
+
+```
 
 ##### replace
 
