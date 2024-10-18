@@ -5900,6 +5900,24 @@ kubectl version -o json
 ![](assets/Pasted%20image%2020241016160021.png)
 
 #### pod深入
+Docker Desktop for Windows 上的 Kubernetes 环境主要适用于开发和轻量测试，默认内置的 CNI 网络功能比较有限，难以支持如 Calico 等插件.
+
+k8s的cri容器镜像源, 是跟 container images mirror 保持一直的. 所以我们这里要修改一下镜像源.
+![](assets/Pasted%20image%2020241019060132.png)
+
+
+![](pod/nginx-demo.yaml)
+
+
+
+
+
+
+如果是完全版本的cni插件,  应该会自动路由 
+![](assets/Pasted%20image%2020241019023420.png)
+
+
+
 
 
 
