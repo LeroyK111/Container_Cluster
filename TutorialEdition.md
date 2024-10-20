@@ -5905,34 +5905,480 @@ Docker Desktop for Windows 上的 Kubernetes 环境主要适用于开发和轻�
 k8s的cri容器镜像源, 是跟 container images mirror 保持一直的. 所以我们这里要修改一下镜像源.
 ![](assets/Pasted%20image%2020241019060132.png)
 
+创建文件demo.yaml文件
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  labels:
+    app: my-app
+    version: 1.0.0
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+      env:
+        - name: JVM_OPTS
+          value: "-Xms128m -Xmx128m"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      command:
+        - nginx
+        - -g
+        - "daemon off;"
+      workingDir: /usr/share/nginx/html
+    - name: tomcat
+      image: tomcat:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+  restartPolicy: Always # pod重启策略
 
-![](pod/nginx-demo.yaml)
 
 
 
+---
+# 如果你使用cni插件, service 会被自动创建
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-service
+  namespace: default
+  labels:
+    app: my-app
+spec:
+  selector:
+    app: my-app # 确保标签选择器和 Pod 的标签一致，以便找到正确的 Pod
+  ports:
+    - protocol: TCP
+      name: tomcat
+      port: 8080 # server资源服务对外监听的端口
+      targetPort: 8080 # 容器对外暴露端口
+      nodePort: 30081 # 显式指定 NodePort The Service "demo-service" is invalid: spec.ports[0].nodePort: Invalid value: 8080: provided port is not in the valid range. The range of valid ports is 30000-32767 这里就是节点固定端口
+    - protocol: TCP
+      name: nginx
+      port: 80
+      targetPort: 80
+      nodePort: 30080 # 显式指定 NodePort
+  type: NodePort # 指定为 NodePort，将端口暴露到节点 IP
+
+```
+
+```sh
+# 直接应用yaml文件, 进行资源部署
+kubectl apply -f demo.yaml
+```
 
 
+使用 service 可以将 pod中的 container 顺便映射到外部宿主机来.
+三种端口的简单理解
+![](assets/Pasted%20image%2020241019095827.png)
+ - port: service专用抽象层路由, 为集群内部的pod和集群外部用户访问的端口 
+ - targetPort: pod内部专用抽象路由, 是容器对外暴露的端口.
+ - nodePort: node节点服务器固定端口, 只能是为集群外部用户服务
+k8s毕竟是四层网络结构.  这里我们缺少了cni层, 所以服务发现和外部访问会出现问题, 导致我们刚才
+![](assets/Pasted%20image%2020241019101002.png)
+![](assets/Pasted%20image%2020241019101019.png)
 
-如果是完全版本的cni插件,  应该会自动路由 
+- 使用Port Forward 也可以临时将端口暴露 给 宿主机所在ip port
+```sh
+kubectl port-forward pod/demo 80:80
+kubectl port-forward pod/demo 8080:8080
+```
+
+如果是如果配置了的cni插件,  应该会自动路由, 服务自动发现, 并且暴露端口给这个分配的虚拟ip. 
+如下:
+```sh
+kubectl get pod -o wide
+route -n
+```
 ![](assets/Pasted%20image%2020241019023420.png)
 
+```
+# 查看pod具体信息
+kubectl describe po demo
+```
+![](assets/Pasted%20image%2020241019102551.png)
+
+由于我们没有配置cni插件, 所以这个ip是一个无法访问的地址. 
+![](assets/Pasted%20image%2020241019101616.png)
+
+所以我们选择了手动暴露, 使用port-forward 或者 Service 都可以将端口暴露出来. 这里我们选择了Service资源.
+这样一来我们就可以在宿主机上访问这个web了
+![](assets/Pasted%20image%2020241019102901.png)
+##### 探针 probe
+
+在 Kubernetes 中，**探针（Probe）** 是一种机制，用于检测和监控 Pod 中容器的健康状况和运行状态。探针的主要作用是确定容器是否在正常运行，以及是否能够接受流量请求。如果容器出现故障或者健康检查未通过，探针会触发相应的操作，例如重启容器或者停止向其发送流量。
+
+Kubernetes 提供了三种类型的探针：**就绪探针（Readiness Probe）**、**存活探针（Liveness Probe）** 和 **启动探针（Startup Probe）**。下面我详细介绍它们的作用及应用场景。
+
+###### 探针的配置参数
+- **initialDelaySeconds**：在容器启动后等待多长时间开始进行探测。
+- **periodSeconds**：探针检测的间隔时间，表示多久检测一次。
+- **timeoutSeconds**：探针检测的超时时间，表示检测等待的最大时间。
+- **successThreshold**：探针检测多少次成功后才被认为是“就绪”或“健康”。
+- **failureThreshold**：探针检测多少次失败后才认为容器处于“失败”状态。
+
+```sh
+kubectl get po -n kube-system
+```
+
+![](assets/Pasted%20image%2020241020071954.png)
+```sh
+$ kubectl get deploy -n kube-system
+NAME      READY   UP-TO-DATE   AVAILABLE   AGE
+coredns   2/2     2            2           77d
+```
+
+```sh
+kubectl edit deploy -n kube-system coredns
+```
+![](assets/Pasted%20image%2020241020073134.png)
+这里我们就能看到默认配置问题.
+![](assets/Pasted%20image%2020241020082911.png)
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  labels:
+    app: my-app
+    version: 1.0.0
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+      env:
+        - name: JVM_OPTS
+          value: "-Xms128m -Xmx128m"
+      startupProbe: # 启动探针, 复杂启动配置需要用到
+        # httpGet:
+        # path: /
+        # port: 80
+        # tcpSocket:
+        #   port: 80
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - echo "nginx started successfully" >> /usr/share/nginx/html/startup.log
+            # kubectl exec demo -n default -c nginx -- cat /usr/share/nginx/html/startup.log
+        initialDelaySeconds: 1
+        periodSeconds: 5
+        failureThreshold: 3
+        successThreshold: 1
+        timeoutSeconds: 3
+      livenessProbe: # 存活探针, 主要是解决bug和压测
+        httpGet:
+          path: /
+          port: 80
+        periodSeconds: 5
+        failureThreshold: 3
+        successThreshold: 1
+        timeoutSeconds: 1
+      readinessProbe: # 就绪探针, 然后可以接受流量
+        httpGet:
+          path: /
+          port: 80
+        periodSeconds: 5
+        failureThreshold: 3
+        successThreshold: 1
+        timeoutSeconds: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      command:
+        - nginx
+        - -g
+        - "daemon off;"
+      workingDir: /usr/share/nginx/html
+    - name: tomcat
+      image: tomcat:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+  restartPolicy: Always
+
+---
+# 如果你使用cni插件, service 会被自动创建
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-service
+  namespace: default
+  labels:
+    app: my-app
+spec:
+  selector:
+    app: my-app # 确保标签选择器和 Pod 的标签一致，以便找到正确的 Pod
+  ports:
+    - protocol: TCP
+      name: tomcat
+      port: 8080
+      targetPort: 8080
+      nodePort: 30081 # 显式指定 NodePort The Service "demo-service" is invalid: spec.ports[0].nodePort: Invalid value: 8080: provided port is not in the valid range. The range of valid ports is 30000-32767
+    - protocol: TCP
+      name: nginx
+      port: 80
+      targetPort: 80
+      nodePort: 30080 # 显式指定 NodePort
+  type: NodePort # 指定为 NodePort，将端口暴露到节点 IP
+
+
+```
+
+
+```sh
+# 查看pod状态
+kubectl describe pod demo -n default
+# 执行容器内执行命令
+kubectl exec demo -n default -c nginx -- cat /usr/share/nginx/html/startup.log
+# 进入容器
+kubectl exec -it demo -c nginx -n default -- /bin/sh
+```
 
 
 
+###### 探针的类型
+1. **存活探针（Liveness Probe）**：
+   - **作用**：检测容器是否仍然处于正常运行状态。如果 Liveness 探针检测失败，Kubernetes 会认为该容器已进入故障状态，然后重启该容器。
+   - **典型场景**：
+     - 如果一个容器由于内部问题（例如死锁、内存泄漏）而挂起或崩溃，但进程仍然保持“运行”状态时，Liveness 探针可以检测到这一情况并将其重启。
+   - **应用示例**：
+     ```yaml
+     livenessProbe:
+       httpGet:
+         path: /healthz
+         port: 8080
+       initialDelaySeconds: 3
+       periodSeconds: 10
+     ```
+     在这个示例中，Liveness 探针会通过 HTTP GET 请求 `/healthz` 路径来检测容器的健康状态。如果该请求没有返回成功的状态码，容器会被重新启动。
+
+启动探针之后的故障恢复.
+
+2. **就绪探针（Readiness Probe）**：
+   - **作用**：检测容器是否已经准备好接收请求。如果 Readiness 探针检测失败，Kubernetes 将不会将流量发送到该容器。该容器仍然保持运行状态，但不被认为是“就绪”状态。
+   - **典型场景**：
+     - 当应用启动时，可能需要花费一些时间进行初始化（例如加载配置文件、连接数据库等），此时容器虽然已经启动，但还没有准备好对外提供服务。在此情况下，就绪探针可以确保容器只在准备好接收流量后才被访问。
+   - **应用示例**：
+     ```yaml
+     readinessProbe:
+       httpGet:
+         path: /readiness
+         port: 8080
+       initialDelaySeconds: 5
+       periodSeconds: 10
+     ```
+     这个示例中，Readiness 探针每隔 10 秒检测一次容器是否准备就绪。如果失败，该容器将不再接收 Service 的流量。
+启动探针 之后.
 
 
+3. **启动探针（Startup Probe）**：
+   - **作用**：用于检测容器的启动是否成功。Startup 探针的目的是解决一些启动时间较长的应用问题，确保它们有足够的时间完成初始化。如果 Startup 探针检测成功，那么 Liveness 和 Readiness 探针才会继续起作用。如果 Startup 探针检测失败，Kubernetes 会重启该容器。
+   - **典型场景**：
+     - 一些应用的启动过程非常复杂，可能需要较长的初始化时间。如果直接使用 Liveness 探针，可能由于启动时间过长而被错误重启。Startup 探针可以有效避免这种情况。
+   - **应用示例**：
+     ```yaml
+     startupProbe:
+       httpGet:
+         path: /startup
+         port: 8080
+       initialDelaySeconds: 10
+       periodSeconds: 10
+       failureThreshold: 30
+     ```
+     在这个示例中，Startup 探针每 10 秒检测一次，如果连续 30 次失败，容器会被重新启动。
+这个是最先优先级 监测的探针.
 
-##### 探针
+```sh
+# 查看所有的命名空间
+PS E:\cloud\Container_Cluster\pod> kubectl get ns       
+NAME              STATUS   AGE
+default           Active   77d
+kube-node-lease   Active   77d
+kube-public       Active   77d
+kube-system       Active   77d
+```
+###### 探针的工作机制
+每种探针都有多种检测方式来判断容器的健康状态：
+1. **HTTP GET 请求（httpGet）**：
+   - 通过 HTTP GET 请求指定的路径，如果返回的 HTTP 状态码在 200-399 范围内，则认为探针检测成功。
+2. **命令执行（exec）**：
+   - 通过执行容器内的某个命令来检测状态。如果命令的退出状态码为 0，则表示探针检测成功。
+   - 例如：
+     ```yaml
+     exec:
+       command:
+         - cat
+         - /tmp/healthy
+     ```
+     如果执行 `cat /tmp/healthy` 的退出码为 0，则探针检测成功。
+3. **TCP Socket（tcpSocket）**：
+   - 通过尝试连接到容器的某个端口。如果端口可达，则表示探针检测成功。
+   - 例如：
+     ```yaml
+     tcpSocket:
+       port: 8080
+     ```
 
-
-
-
+###### 探针的使用场景
+- **提高应用的稳定性和自动恢复能力**：探针可以帮助 Kubernetes 检测到容器的异常状态，并自动重启它们，从而提高应用的稳定性和自动恢复能力。
+- **平滑的应用发布和服务质量保证**：使用就绪探针可以确保在应用完全准备好之前不会接收流量，避免因不完全启动的服务而导致请求失败。
+- **解决启动时间过长的问题**：使用启动探针，可以避免启动时间过长的容器因未在预期时间内响应而被误判为失败并重启。
 ##### 生命周期
+![](assets/Pasted%20image%2020241020094852.png)
+![](assets/Pasted%20image%2020241020094920.png)
+测试学习生命周期
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  labels:
+    app: my-app
+    version: 1.0.0
+spec:
+  terminationGracePeriodSeconds: 10 # pod被删除时,优雅的终止时间30s默认, 我们这里改成10s
+  containers:
+    - name: nginx
+      image: nginx:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+      env:
+        - name: JVM_OPTS
+          value: "-Xms128m -Xmx128m"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      command:
+        - nginx
+        - -g
+        - "daemon off;"
+      workingDir: /usr/share/nginx/html
+      lifecycle: # 生命周期
+        postStart: # 容器启动前的操作
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - echo "<h1>postStart</h1>" > /usr/share/nginx/html/index.html
+        preStop: # 容器被删除前的操作
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - "echo '<h1>sleep finished</h1>' >> /usr/share/nginx/html/index.html;sleep 50;"
+    - name: tomcat
+      image: tomcat:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+  restartPolicy: Always
+
+---
+# 如果你使用cni插件, service 会被自动创建
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-service
+  namespace: default
+  labels:
+    app: my-app
+spec:
+  selector:
+    app: my-app # 确保标签选择器和 Pod 的标签一致，以便找到正确的 Pod
+  ports:
+    - protocol: TCP
+      name: tomcat
+      port: 8080
+      targetPort: 8080
+      nodePort: 30081 # 显式指定 NodePort The Service "demo-service" is invalid: spec.ports[0].nodePort: Invalid value: 8080: provided port is not in the valid range. The range of valid ports is 30000-32767
+    - protocol: TCP
+      name: nginx
+      port: 80
+      targetPort: 80
+      nodePort: 30080 # 显式指定 NodePort
+  type: NodePort # 指定为 NodePort，将端口暴露到节点 IP
 
 
+```
+
+```sh
+# 应用文件
+kubectl apply -f .\life_demo.yaml
+# 此刻  postStart 已经修改了index文件了
+kubectl get po -w
+NAME   READY   STATUS    RESTARTS   AGE
+demo   2/2     Running   0          116s
+
+kubectl delete po demo
+```
+
+![](assets/Pasted%20image%2020241020102446.png)
+
+#### 资源调度
 
 
+#### 服务发现
 
+#### 配置与存储
+
+
+#### 高级调度
+
+
+#### 访问控制
+
+
+#### HELM包管理
+
+#### 集群监控
+
+
+#### 集群日志管理
+
+
+#### 运维管理平台
+
+
+#### 微服务案例
 
 
 
