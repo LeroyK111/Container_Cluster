@@ -6354,6 +6354,161 @@ kubectl delete po demo
 ![](assets/Pasted%20image%2020241020102446.png)
 
 #### 资源调度
+![](dispatch/demo.yaml)
+这里我们通过selector为pod添加metadata labels.
+
+```sh
+$ kubectl get po --show-labels
+NAME   READY   STATUS    RESTARTS   AGE     LABELS
+demo   2/2     Running   0          7m19s   app=my-app,version=1.0.0
+
+$ kubectl get po --show-labels -n default
+NAME   READY   STATUS    RESTARTS   AGE     LABELS
+demo   2/2     Running   0          7m48s   app=my-app,version=1.0.0
+
+# 添加标签
+$ kubectl label po demo author=xiaomi
+pod/demo labeled
+# 强制添加标签
+ kubectl label po demo author=xm --overwrite  
+
+
+$ kubectl get po --show-labels -n default
+NAME   READY   STATUS    RESTARTS   AGE     LABELS
+demo   2/2     Running   0          9m33s   app=my-app,author=xiaomi,version=1.0.0
+```
+
+其他方法修改metadata labels
+```sh
+# 删除标签
+kubectl label pod demo app-
+# 直接编辑yaml
+kubectl edit pod demo
+# 修改
+kubectl patch pod demo -p '{"metadata": {"labels": {"version": "2.0.0"}}}'
+kubectl patch pod demo --type=json -p='[{"op": "remove", "path": "/metadata/labels/version"}]'
+```
+
+- 如何使用标签
+```sh
+$ kubectl get po -n default -l app=my-app
+NAME   READY   STATUS    RESTARTS   AGE
+demo   2/2     Running   0          41m
+
+# 增加命名空间
+$ kubectl get po -n default -l app=my-app -A
+NAMESPACE   NAME   READY   STATUS    RESTARTS   AGE
+default     demo   2/2     Running   0          46m
+
+# 支持表达式查询
+$ kubectl get po -l 'version in (1.0.0, 1.2.0)'
+NAME   READY   STATUS    RESTARTS   AGE
+demo   2/2     Running   0          49m
+
+# 支持组合查询
+$ kubectl get po -l 'version in (1.0.0, 1.2.0),app=my-app'
+NAME   READY   STATUS    RESTARTS   AGE
+demo   2/2     Running   0          52m
+```
+
+##### Deployment
+本质就是对RS副本进行高度的封装.
+```sh
+# 手动创建 deployment
+kubectl create deploy nginx-deploy --image=nginx:latest
+
+> kubectl get deploy
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deploy   1/1     1            1           19s
+> kubectl get replicaset
+NAME                      DESIRED   CURRENT   READY   AGE
+nginx-deploy-5dfb969fc8   1         1         1       5m34s
+
+# 快速得到nginx配置文件
+> kubectl get deploy nginx-deploy -o yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  creationTimestamp: "2024-10-21T04:06:01Z"
+  generation: 1
+  labels:
+    app: nginx-deploy
+  name: nginx-deploy
+  namespace: default
+  resourceVersion: "6504152"
+  uid: 8b7bd516-90b1-400d-8df8-dafaee263d3f
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: nginx-deploy
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: nginx-deploy
+    spec:
+      containers:
+      - image: nginx:latest
+        imagePullPolicy: Always
+        name: nginx
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2024-10-21T04:06:17Z"
+    lastUpdateTime: "2024-10-21T04:06:17Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2024-10-21T04:06:01Z"
+    lastUpdateTime: "2024-10-21T04:06:17Z"
+    message: ReplicaSet "nginx-deploy-5dfb969fc8" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  observedGeneration: 1
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
+```
+
+```sh
+# 
+```
+
+
+
+
+##### StatefulSet
+
+
+
+##### DaemonSet
+
+
+
+
+
+
+
 
 
 #### 服务发现

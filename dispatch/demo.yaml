@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  # 给pod打上标签
+  labels:
+    app: my-app
+    version: 1.0.0
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+      env:
+        - name: JVM_OPTS
+          value: "-Xms128m -Xmx128m"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      command:
+        - nginx
+        - -g
+        - "daemon off;"
+      workingDir: /usr/share/nginx/html
+    - name: tomcat
+      image: tomcat:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+  restartPolicy: Always
+
+---
+# 如果你使用cni插件, service 会被自动创建
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-service
+  namespace: default
+  labels:
+    app: my-app-service
+spec:
+  # 这里通过metadata进行筛选pod
+  selector:
+    app: my-app # 确保标签选择器和 Pod 的标签一致，以便找到正确的 Pod
+  ports:
+    - protocol: TCP
+      name: tomcat
+      port: 8080
+      targetPort: 8080
+      nodePort: 30081 # 显式指定 NodePort The Service "demo-service" is invalid: spec.ports[0].nodePort: Invalid value: 8080: provided port is not in the valid range. The range of valid ports is 30000-32767
+    - protocol: TCP
+      name: nginx
+      port: 80
+      targetPort: 80
+      nodePort: 30080 # 显式指定 NodePort
+  type: NodePort # 指定为 NodePort，将端口暴露到节点 IP
