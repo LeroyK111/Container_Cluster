@@ -22,9 +22,10 @@ spec: # spec: 描述 Deployment 的规格。
         app: nginx-deploy # 标签 `app: nginx-deploy` 确保此 Pod 可以被正确选择和管理。
     spec: # spec: 描述 Pod 的规格。
       containers: # containers: 定义 Pod 中的容器。
-      - image: nginx:latest # image: 使用的容器镜像，这里是 nginx 的最新版本。
-        imagePullPolicy: Always # imagePullPolicy: 镜像拉取策略，Always 表示每次启动都从仓库拉取镜像。
-        name: nginx # name: 容器名称，必须在同一 Pod 内唯一。
+        - image: nginx:latest # image: 使用的容器镜像，这里是 nginx 的最新版本。
+          imagePullPolicy: Always # imagePullPolicy: 镜像拉取策略，Always 表示每次启动都从仓库拉取镜像。
+          name: nginx # name: 容器名称，必须在同一 Pod 内唯一。
       restartPolicy: Always # restartPolicy: 容器重启策略，Always 表示容器崩溃后总是重启。
       schedulerName: default-scheduler # schedulerName: 调度器名称，指定为默认调度器。
       terminationGracePeriodSeconds: 30 # terminationGracePeriodSeconds: Pod 删除时优雅终止的等待时间，单位为秒，这里设置为 30 秒。
+      
