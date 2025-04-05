@@ -3,6 +3,7 @@ kind: Deployment # kind: 资源的类型，这里是一个 Deployment，用于�
 metadata: # metadata: 元数据部分，用于描述资源的基本信息。
   labels: # labels: 资源的标签，用于对 Deployment 进行标识和分类。
     app: nginx-deploy # 标签 `app: nginx-deploy` 用于标识此 Deployment。
+    test: "123"
   name: nginx-deploy # name: Deployment 的名称，必须在命名空间内唯一。
   namespace: default # namespace: 资源所在的命名空间，这里是 default。
 spec: # spec: 描述 Deployment 的规格。
@@ -28,4 +29,3 @@ spec: # spec: 描述 Deployment 的规格。
       restartPolicy: Always # restartPolicy: 容器重启策略，Always 表示容器崩溃后总是重启。
       schedulerName: default-scheduler # schedulerName: 调度器名称，指定为默认调度器。
       terminationGracePeriodSeconds: 30 # terminationGracePeriodSeconds: Pod 删除时优雅终止的等待时间，单位为秒，这里设置为 30 秒。
-      

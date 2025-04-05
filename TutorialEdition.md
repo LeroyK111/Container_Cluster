@@ -1841,6 +1841,8 @@ kubectl patch service my-service -p '{"spec": {"ports": [{"port": 8080, "targetP
 - **`kubectl replace`**：适用于需要完全替换资源配置的情况，要求资源已存在，否则会报错。
 - **`kubectl apply`**：适用于声明式管理资源的整个生命周期，支持新建和更新资源。
 
+
+
 基本用法
 
 ```bash
@@ -6226,6 +6228,14 @@ kube-node-lease   Active   77d
 kube-public       Active   77d
 kube-system       Active   77d
 ```
+- `default`：默认命名空间，未指定命名空间的资源会被放在这里。
+    
+- `kube-node-lease`：用于存储每个节点的租约对象，有助于节点故障检测。
+    
+- `kube-public`：集群中的所有用户（包括未认证用户）都可以访问的公共命名空间，通常用于公开可访问的资源。
+    
+- `kube-system`：由 Kubernetes 系统创建的对象所在的命名空间，主要用于存放系统级的资源。
+
 ###### 探针的工作机制
 每种探针都有多种检测方式来判断容器的健康状态：
 1. **HTTP GET 请求（httpGet）**：
@@ -6413,16 +6423,26 @@ demo   2/2     Running   0          52m
 
 ##### Deployment
 本质就是对RS副本进行高度的封装.
+```
+无状态服务, 使用这个.
+```
+
 ```sh
 # 手动创建 deployment
 kubectl create deploy nginx-deploy --image=nginx:latest
 
+# 第一层
 > kubectl get deploy
 NAME           READY   UP-TO-DATE   AVAILABLE   AGE
 nginx-deploy   1/1     1            1           19s
+# 第二层
 > kubectl get replicaset
 NAME                      DESIRED   CURRENT   READY   AGE
 nginx-deploy-5dfb969fc8   1         1         1       5m34s
+# 第三层
+> kubectl get po        
+NAME                            READY   STATUS    RESTARTS   AGE
+nginx-deploy-7c4b649988-blxgd   1/1     Running   0          4m31s
 
 # 快速得到nginx配置文件
 > kubectl get deploy nginx-deploy -o yaml
@@ -6490,16 +6510,108 @@ status:
   updatedReplicas: 1
 ```
 
+###### 编辑配置文件
 ```sh
-# 
+> kubectl edit deploy nginx-deploy
+
+# 添加labels下添加test: "123" 保存后, 即可看到
+
+> kubectl get deploy nginx-deploy --show-labels
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE   LABELS
+nginx-deploy   1/1     1            1           33m   app=nginx-deploy,test=123
+
+# 可以看到标签更新了, 但是pod没有更新.
+> kubectl describe deploy              
+Name:                   nginx-deploy
+Namespace:              default
+CreationTimestamp:      Sat, 05 Apr 2025 16:20:13 +0800
+Labels:                 app=nginx-deploy
+                        test=123
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=nginx-deploy
+Replicas:               1 desired | 1 updated | 1 total | 1 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=nginx-deploy
+  Containers:
+   nginx:
+    Image:         nginx:latest
+    Port:          <none>
+    Host Port:     <none>
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   nginx-deploy-7c4b649988 (1/1 replicas created)
+# 事件中我们没有看到对应的操作
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  40m   deployment-controller  Scaled up replica set nginx-deploy-7c4b649988 from 0 to 1
 ```
 
- 
-
-
+如果我们修改副本数, 则会触发滚动更新.
+```sh
+> kubectl describe deploy nginx-deploy
+Name:                   nginx-deploy
+Namespace:              default
+CreationTimestamp:      Sat, 05 Apr 2025 16:20:13 +0800
+Labels:                 app=nginx-deploy
+                        test=123
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=nginx-deploy
+Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=nginx-deploy
+  Containers:
+   nginx:
+    Image:         nginx:latest
+    Port:          <none>
+    Host Port:     <none>
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Progressing    True    NewReplicaSetAvailable
+  Available      True    MinimumReplicasAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   nginx-deploy-7c4b649988 (3/3 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  45m    deployment-controller  Scaled up replica set nginx-deploy-7c4b649988 from 0 to 1
+# 副本集数量变动
+  Normal  ScalingReplicaSet  2m43s  deployment-controller  Scaled up replica set nginx-deploy-7c4b649988 from 1 to 3
+```
+![](assets/Pasted%20image%2020250405171026.png)
+```sh
+# 查看
+> kubectl get rs --show-labels
+NAME                      DESIRED   CURRENT   READY   AGE   LABELS
+nginx-deploy-7c4b649988   3         3         3       52m   app=nginx-deploy,pod-template-hash=7c4b649988
+```
 
 ##### StatefulSet
 
+```
+有状态服务
+```
 
 
 ##### DaemonSet
