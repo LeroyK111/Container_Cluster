@@ -6605,7 +6605,16 @@ Events:
 > kubectl get rs --show-labels
 NAME                      DESIRED   CURRENT   READY   AGE   LABELS
 nginx-deploy-7c4b649988   3         3         3       52m   app=nginx-deploy,pod-template-hash=7c4b649988
+
+> kubectl get po --show-labels
+NAME                            READY   STATUS    RESTARTS   AGE   LABELS
+nginx-deploy-7c4b649988-blxgd   1/1     Running   0          9h    app=nginx-deploy,pod-template-hash=7c4b649988
+nginx-deploy-7c4b649988-qf6qs   1/1     Running   0          8h    app=nginx-deploy,pod-template-hash=7c4b649988
+nginx-deploy-7c4b649988-vpp89   1/1     Running   0          8h    app=nginx-deploy,pod-template-hash=7c4b649988
 ```
+
+
+
 
 ##### StatefulSet
 
