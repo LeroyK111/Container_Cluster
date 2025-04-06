@@ -6511,6 +6511,13 @@ status:
 ```
 
 ###### 编辑配置文件
+
+直接修改deploy labels 无法触发滚动更新.
+```sh
+>kubectl label deployment nginx-deploy new=aaa
+```
+
+只有编辑pod的配置模板才能实现滚动更新.
 ```sh
 > kubectl edit deploy nginx-deploy
 
@@ -6612,9 +6619,148 @@ nginx-deploy-7c4b649988-blxgd   1/1     Running   0          9h    app=nginx-dep
 nginx-deploy-7c4b649988-qf6qs   1/1     Running   0          8h    app=nginx-deploy,pod-template-hash=7c4b649988
 nginx-deploy-7c4b649988-vpp89   1/1     Running   0          8h    app=nginx-deploy,pod-template-hash=7c4b649988
 ```
+######  回滚
+有时候你可能想回退一个deployment, 比如一直crash looping.
+```sh
+
+# 设置deploy/nginx-deploy镜像版本
+>kubectl set image  deploy/nginx-deploy nginx=nginx:1.91 
+deployment.apps/nginx-deploy image updated
+
+# 查看更新状态
+> kubectl rollout status deploy nginx-deploy             
+Waiting for deployment "nginx-deploy" rollout to finish: 1 out of 3 new replicas have been updated...
+
+由于没有这个镜像,则就会卡住了.
+```
+
+卡住了
+```
+> kubectl get rs
+NAME                      DESIRED   CURRENT   READY   AGE
+nginx-deploy-7c4b649988   3         3         3       22h
+nginx-deploy-858bd4d5c8   1         1         0       3m54s # 这里是新的pod
+
+> kubectl get pods
+NAME                            READY   STATUS             RESTARTS        AGE
+nginx-deploy-7c4b649988-blxgd   1/1     Running            1 (5h20m ago)   22h
+nginx-deploy-7c4b649988-qf6qs   1/1     Running            1 (5h20m ago)   21h
+nginx-deploy-7c4b649988-vpp89   1/1     Running            1 (5h20m ago)   21h
+nginx-deploy-858bd4d5c8-6x2bx   0/1     ImagePullBackOff   0               5m47s
+```
+查看更新状态
+```sh
+>kubectl describe po
+```
+![](assets/Pasted%20image%2020250406150446.png)
+pull image failed 所以状态改变.
+
+```sh
+# 回滚版本信息
+> kubectl rollout history deploy/nginx-deploy
+deployment.apps/nginx-deploy 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+```
+```sh
+# 已经弃用, 会将命令放入记录到CHANGE-CAUSE
+>kubectl set image  deploy/nginx-deploy nginx=nginx:1.91 --record 
+
+# 这个就好很多,可以自定义版本 tag
+> kubectl annotate deployment/nginx-deploy kubernetes.io/change-cause="Updated nginx image to 1.91" --overwrite
+
+deployment.apps/nginx-deploy annotated
+
+> kubectl rollout history deploy/nginx-deploy                                                   
+deployment.apps/nginx-deploy 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         Updated nginx image to 1.91
+```
+
+查看一下revision对应的变动内容
+```
+> kubectl rollout history deploy/nginx-deploy --revision=1 
+deployment.apps/nginx-deploy with revision #1
+Pod Template:
+  Labels:       app=nginx-deploy
+        pod-template-hash=7c4b649988
+  Containers:
+   nginx:
+    Image:      nginx:latest
+    Port:       <none>
+    Host Port:  <none>
+    Environment:        <none>
+    Mounts:     <none>
+  Volumes:      <none>
+  Node-Selectors:       <none>
+  Tolerations:  <none>
+```
+回退到1版本
+```sh
+> kubectl rollout undo deployment/nginx-deploy --to-revision=1
+deployment.apps/nginx-deploy rolled back
+
+# 查看回退情况
+> kubectl rollout status deploy/nginx-deploy 
+deployment "nginx-deploy" successfully rolled out
+```
+![](assets/Pasted%20image%2020250406155426.png)
+这里的 `nginx-deploy-858bd4d5c8` 是在您更新或回滚 `nginx-deploy` Deployment 时创建的新的 `ReplicaSet`。​虽然该 `ReplicaSet` 当前的副本数为 0，但 Kubernetes 默认会保留一定数量的旧 `ReplicaSet` 以支持快速回滚操作。​默认情况下，Kubernetes 会保留最多 10 个旧的 `ReplicaSet`。
+```
+> kubectl get rs                            
+NAME                      DESIRED   CURRENT   READY   AGE
+nginx-deploy-7c4b649988   3         3         3       23h
+nginx-deploy-858bd4d5c8   0         0         0       59m
+```
+如果你不需要临时副本
+```sh
+# 删除即可
+>kubectl delete rs nginx-deploy-858bd4d5c8
+
+# 修改nginx_deploy.yaml中的  revisionHistoryLimit: 10 # revisionHistoryLimit: 保留的历史版本数量，这里设置为 10。
+# 如果revisionHistoryLimit设为0,则无法使用任何回退.
+```
+
+###### 扩容缩容
+配置文件扩容
+```sh
+> kubectl edit deploy/nginx-deploy
+```
+![](assets/Pasted%20image%2020250406160446.png)
+命令扩容缩容
+```sh
+> kubectl scale --replicas=6 deploy/nginx-deploy 
+deployment.apps/nginx-deploy scaled
+
+> kubectl get rs --show-labels
+NAME                      DESIRED   CURRENT   READY   AGE   LABELS
+nginx-deploy-7c4b649988   6         6         6       23h   app=nginx-deploy,pod-template-hash=7c4b649988
+nginx-deploy-858bd4d5c8   0         0         0       74m   app=nginx-deploy,pod-template-hash=858bd4d5c8
+```
+这就扩容完毕了. 
+###### 暂停与恢复
+
+暂停场景
+```sh
+
+```
+
+恢复场景
+```
+
+```
 
 
+```sh
+ 当使用 `kubectl apply` 创建或更新资源时，`kubectl` 会在资源的元数据中添加一个名为 `kubectl.kubernetes.io/last-applied-configuration` 的注解。​该注解存储了上次应用的配置内容，供后续操作比较和计算差异。​如果资源最初是通过其他方式（例如 `kubectl create` 或直接使用 API）创建的，且未包含此注解，`kubectl apply` 将无法找到该注解，因此发出警告。
+**忽略该警告：** 如果您计划继续使用 `kubectl apply` 管理该资源，可以忽略此警告。`kubectl apply` 会自动为资源添加缺失的注解，后续操作将正常进行。 ​
 
+
+> kubectl apply -f .\nginx_deploy.yaml
+Warning: resource deployments/nginx-deploy is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+```
 
 ##### StatefulSet
 
