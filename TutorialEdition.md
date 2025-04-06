@@ -6742,14 +6742,16 @@ nginx-deploy-858bd4d5c8   0         0         0       74m   app=nginx-deploy,pod
 这就扩容完毕了. 
 ###### 暂停与恢复
 
-暂停场景
+暂停场景: 停止template的更新. 但是缩容扩容不受限制
 ```sh
-
+> kubectl rollout pause deploy/nginx-deploy
+deployment.apps/nginx-deploy paused
 ```
 
 恢复场景
 ```
-
+> kubectl rollout resume  deploy/nginx-deploy
+deployment.apps/nginx-deploy resumed
 ```
 
 
@@ -6765,8 +6767,126 @@ Warning: resource deployments/nginx-deploy is missing the kubectl.kubernetes.io/
 ##### StatefulSet
 
 ```
-有状态服务
+有状态服务:数据需要存储
 ```
+![](assets/Pasted%20image%2020250406210433.png)
+```yaml
+apiVersion: v1 # API 版本，指定所使用的 Kubernetes API 版本
+
+kind: Service # 资源类型，这里定义一个 Service（服务）
+
+metadata:
+
+  name: nginx # Service 的名称
+
+  labels:
+
+    app: nginx # Service 的标签，用于标识和选择相关的 Pod
+
+spec:
+
+  ports:
+
+    - port: 80 # Service 暴露的端口号，外部通过此端口访问服务
+
+      name: web # 端口名称，可用于服务发现
+
+  clusterIP: None # 指定为无头服务（Headless Service），适用于 StatefulSet
+
+  selector:
+
+    app: nginx # Service 的选择器，匹配具有该标签的 Pod
+
+  
+
+---
+
+apiVersion: apps/v1 # API 版本，指定所使用的 Kubernetes API 版本
+
+kind: StatefulSet # 资源类型，这里定义一个 StatefulSet（有状态副本集）
+
+metadata:
+
+  name: web # StatefulSet 的名称
+
+spec:
+
+  serviceName: "nginx" # 与 StatefulSet 关联的 Service 名称，需与上面定义的 Service 名称一致
+
+  replicas: 2 # Pod 副本数量，指定运行的 Pod 数量
+
+  selector:
+
+    matchLabels:
+
+      app: nginx # 选择器，匹配具有该标签的 Pod，需与模板中的标签一致
+
+  template: # Pod 模板，定义了创建的 Pod 的配置
+
+    metadata:
+
+      labels:
+
+        app: nginx # Pod 的标签，需与上面的选择器匹配
+
+    spec:
+
+      terminationGracePeriodSeconds: 10 # 优雅终止的等待时间，单位为秒
+
+      containers:
+
+        - name: nginx # 容器名称
+
+          image: nginx:1.7.9 # 使用的容器镜像及版本
+
+          ports:
+
+            - containerPort: 80 # 容器内部监听的端口号
+
+              name: web # 端口名称
+```
+
+```sh
+> kubectl create -f nginx_state.yaml
+service/nginx created
+statefulset.apps/nginx created
+```
+```
+> kubectl get sts
+NAME   READY   AGE
+web    2/2     38s
+
+> kubectl get svc
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   24d
+nginx        ClusterIP   None         <none>        80/TCP    86s
+
+> kubectl get po
+NAME                            READY   STATUS    RESTARTS        AGE
+nginx-deploy-7c4b649988-f4gk2   1/1     Running   0               149m
+nginx-deploy-7c4b649988-jql4z   1/1     Running   0               149m
+nginx-deploy-7c4b649988-qf6qs   1/1     Running   2 (3h31m ago)   30h
+web-0                           1/1     Running   0               31s
+web-1                           1/1     Running   0               17s
+```
+如何访问web0, web1, 创建临时容器, 通过k8s 虚拟dns访问web-0
+```sh
+> kubectl run -it --image busybox dns-test --restart=Never --rm /bin/sh
+If you don't see a command prompt, try pressing enter.
+/ # ping web-0.nginx
+PING web-0.nginx (10.1.5.54): 56 data bytes
+64 bytes from 10.1.5.54: seq=0 ttl=64 time=0.055 ms
+64 bytes from 10.1.5.54: seq=1 ttl=64 time=0.060 ms
+64 bytes from 10.1.5.54: seq=2 ttl=64 time=0.039 ms
+
+# 这里就是映射关系
+/ # nslookup web-0.nginx
+Server:         10.96.0.10
+Address:        10.96.0.10:53
+```
+
+
+
 
 
 ##### DaemonSet
