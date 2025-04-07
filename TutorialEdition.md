@@ -6869,6 +6869,8 @@ nginx-deploy-7c4b649988-qf6qs   1/1     Running   2 (3h31m ago)   30h
 web-0                           1/1     Running   0               31s
 web-1                           1/1     Running   0               17s
 ```
+###### 测试svc与sts
+
 如何访问web0, web1, 创建临时容器, 通过k8s 虚拟dns访问web-0
 ```sh
 > kubectl run -it --image busybox dns-test --restart=Never --rm /bin/sh
@@ -6885,13 +6887,155 @@ Server:         10.96.0.10
 Address:        10.96.0.10:53
 ```
 
+###### 扩容缩容
+```sh
+PS E:\cloud\Container_Cluster\dispatch> kubectl scale sts web --replicas=5
+statefulset.apps/web scaled
+PS E:\cloud\Container_Cluster\dispatch> kubectl get sts
+NAME   READY   AGE
+web    2/5     23h
+
+# 本质就是更新template 文件
+>kubectl patch sts web -p '{"spec": {"replicas": 5}}'
+```
+
+###### 镜像更新
+- `RollingUpdate`（默认）：​滚动更新，按照从高到低的序号顺序（即从编号最大的 Pod 开始）依次更新每个 Pod。​
+    
+- `OnDelete`：​仅在手动删除 Pod 时才会更新对应的 Pod。​
+
+老版本不支持set 只能通过patch or apply 等等手段更新template才能更新image.
+
+```sh
+# 这里我们直接使用新版本
+>kubectl set image statefulset/<StatefulSet名称> <容器名称>=<新镜像>
+>kubectl set image sts/web nginx=nginx:1.7.2
+
+# 出现了pull失败
+> kubectl get pods -l app=nginx
+NAME    READY   STATUS             RESTARTS        AGE
+web-0   1/1     Running            1 (5h12m ago)   23h
+web-1   0/1     ImagePullBackOff   0               3m28s
+# 复原原镜像,然后删除即可
+>kubectl set image sts/web nginx=nginx:latest
+>kubectl delete pod <Pod名称>
+
+# 也可以rollout 回滚
+>kubectl rollout history sts web
+statefulset.apps/web 
+REVISION  CHANGE-CAUSE
+2         <none>
+3         <none>
+```
+
+###### 灰度发布/金丝雀发布
+```
+# 利用rollingUpdate 可以是实现一个灰度发布的效果. 滚动更新本就是按照倒序进行交替更新.
+# 这里我们要使用一个参数 partition=n 更新 n>= 的pod的index
+```
+项目上线后, 将产生的问题降低. (更新局部, 然后用户测试, 没问题后, 更新全局)
+```
+> kubectl get pods -l app=nginx
+NAME    READY   STATUS    RESTARTS        AGE
+web-0   1/1     Running   1 (5h56m ago)   24h
+web-1   1/1     Running   0               40m
+web-2   1/1     Running   0               88s
+web-3   1/1     Running   0               81s
+web-4   1/1     Running   0               72s
+```
+然后我们使用edit 设置 
+![](assets/Pasted%20image%2020250408000947.png)
+现在我们去set 他的image 他就只会更新的3,4 (from zero)
+```sh
+>kubectl set image sts/web nginx=nginx:1.19.0
+
+> kubectl describe sts/web
+Name:               web
+Namespace:          default
+CreationTimestamp:  Sun, 06 Apr 2025 23:24:01 +0800
+Selector:           app=nginx
+Labels:             <none>
+Annotations:        <none>
+Replicas:           5 desired | 5 total
+Update Strategy:    RollingUpdate
+  Partition:        3
+Pods Status:        5 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=nginx
+  Containers:
+   nginx:
+    Image:         nginx:1.19.0
+    Port:          80/TCP
+    Host Port:     0/TCP
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Volume Claims:     <none>
+Events:
+  Type    Reason            Age                From                    Message
+  ----    ------            ----               ----                    -------
+  Normal  SuccessfulDelete  58m                statefulset-controller  delete Pod web-1 in StatefulSet web successful
+  Normal  SuccessfulCreate  51m (x2 over 58m)  statefulset-controller  create Pod web-1 in StatefulSet web successful
+  Normal  SuccessfulCreate  12m (x2 over 79m)  statefulset-controller  create Pod web-2 in StatefulSet web successful
+  Normal  SuccessfulDelete  59s (x2 over 72m)  statefulset-controller  delete Pod web-4 in StatefulSet web successful
+  Normal  SuccessfulCreate  57s (x3 over 79m)  statefulset-controller  create Pod web-4 in StatefulSet web successful
+  Normal  SuccessfulDelete  42s (x2 over 72m)  statefulset-controller  delete Pod web-3 in StatefulSet web successful
+  Normal  SuccessfulCreate  41s (x3 over 79m)  statefulset-controller  create Pod web-3 in StatefulSet web successful
 
 
+# 如果想继续全局更新, 则我们要修改 web 的 template 文件的partition参数, 支持多次修改=分段验证
+>kubectl patch statefulset web --type='merge' -p '{"spec":{"updateStrategy":{"rollingUpdate":{"partition":0}}}}'
+# 我们使用edit
+>kubectl edit statefulset web 
 
+# 余下的也会更新起来
+> kubectl get pods
+NAME                            READY   STATUS              RESTARTS        AGE
+nginx-deploy-7c4b649988-f4gk2   1/1     Running             1 (6h19m ago)   27h
+nginx-deploy-7c4b649988-jql4z   1/1     Running             1 (6h19m ago)   27h
+nginx-deploy-7c4b649988-qf6qs   1/1     Running             3 (6h19m ago)   2d7h
+web-0                           0/1     ContainerCreating   0               3s
+web-1                           1/1     Running             0               9s
+web-2                           1/1     Running             0               16s
+web-3                           1/1     Running             0               12m
+web-4                           1/1     Running             0               12m
 
+```
+
+修改更新策略, 只有删除pod时才能重新生成对应的pod
+- **手动更新 Pods：** 设置 `OnDelete` 策略后，StatefulSet 控制器不会自动更新 Pods。当您修改了 StatefulSet 的 `.spec.template`（例如更新容器镜像）后，需要手动删除相应的 Pod，控制器才会根据新的模板重新创建这些 Pod。 ​
+    
+- **删除 Pods 的方法：** 使用以下命令删除特定的 Pod，例如 `web-0`：​
+![](assets/Pasted%20image%2020250408002947.png)
+已经修改images nginx:latest
+```sh
+> kubectl get po web-0 -o jsonpath="{..image}"
+nginx:1.19.0 nginx:1.19.0
+
+# 测试删除web-0后, 会不会重生新镜像
+>kubectl delete pod web-0
+
+# 发生了更新
+> kubectl get po web-0 -o jsonpath="{..image}"
+nginx:latest nginx:latest
+```
+###### 删除
+如果有pvc 容器卷的话, 有两种方式: 级联删除 | 非级联删除
+```sh
+# 默认级联删除
+> kubectl delete sts web
+statefulset.apps "web" deleted
+# 非级联删除
+> kubectl delete sts web --cascade=false
+statefulset.apps "web" deleted
+
+# 删除容器卷
+kubectl delete pvc www-web-0
+```
 ##### DaemonSet
-
-
+控制器, 用来控制node上的各种pod的, 类似一种自定义的触发器.
 
 
 
