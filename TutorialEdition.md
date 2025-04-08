@@ -7425,13 +7425,9 @@ kubectl autoscale deployment nginx-deploy \
 #### 服务发现
 
 
-##### Service
+##### Service 服务
 
-
-
-
-
-##### Ingress
+##### Ingress 进入
 
 
 
