@@ -1,0 +1,38 @@
+apiVersion: apps/v1 # 使用的 API 版本，DaemonSet 属于 apps 组
+kind: DaemonSet # 资源类型，DaemonSet 确保每个节点运行一个 Pod 副本
+metadata:
+  name: fluentd # DaemonSet 的名称
+spec:
+  selector:
+    matchLabels:
+      app: logging #?#匹配的 node label
+
+  template: # Pod 模板
+    metadata:
+      labels:
+        app: logging # ?应用标签，通常用于服务发现和选择器
+        id: fluentd # 自定义标识标签，可用于区分日志组件
+      name: fluentd # Pod 的名称
+    spec:
+      nodeSelector:
+        type: microservices # *给守护容器写上selector
+      containers:
+        - name: fluentd-es # 容器名称
+          image: agilestacks/fluentd-elasticsearch:v1.3.0 # 使用的容器镜像（采集并发送日志到 Elasticsearch）
+          env:
+            - name: FLUENTD_ARGS # 环境变量，用于传递启动参数
+              value: -qq # Fluentd 的参数，这里是静默模式（quiet + quiet）
+          volumeMounts: # 将主机路径挂载到容器内
+            - name: containers
+              mountPath: /var/lib/docker/containers # 挂载 Docker 容器元数据
+            - name: varlog
+              mountPath: /var/log # 挂载日志目录
+      volumes: # 定义挂载所使用的实际主机路径
+        - hostPath:
+            path: /var/lib/docker/containers # 主机路径：Docker 容器元数据存储位置
+          name: containers # 卷名称，对应 volumeMounts 中的 name
+        - hostPath:
+            path: /var/log # 主机路径：系统日志目录
+          name: varlog # 卷名称，对应 volumeMounts 中的 name
+  updateStrategy:
+    type: OnDelete # todo 推荐使用ondelete

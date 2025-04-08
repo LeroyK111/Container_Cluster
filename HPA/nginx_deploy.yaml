@@ -1,0 +1,40 @@
+apiVersion: apps/v1 # apiVersion: 使用的 API 版本，这里指定为 apps/v1。
+kind: Deployment # kind: 资源的类型，这里是一个 Deployment，用于管理 Pod 的部署。
+metadata: # metadata: 元数据部分，用于描述资源的基本信息。
+  labels: # labels: 资源的标签，用于对 Deployment 进行标识和分类。
+    app: nginx-deploy # 标签 `app: nginx-deploy` 用于标识此 Deployment。
+  name: nginx-deploy # name: Deployment 的名称，必须在命名空间内唯一。
+  namespace: default # namespace: 资源所在的命名空间，这里是 default。
+spec: # spec: 描述 Deployment 的规格。
+  replicas: 1 # replicas: 期望的 Pod 副本数量，这里设置为 1。
+  revisionHistoryLimit: 10 # revisionHistoryLimit: 保留的历史版本数量，这里设置为 10。
+  selector: # selector: 定义如何选择由此 Deployment 管理的 Pod。
+    matchLabels: # matchLabels: 用于匹配的标签，选择符合条件的 Pod。
+      app: nginx-deploy # 匹配标签 `app: nginx-deploy` 的 Pod。
+  strategy: # strategy: 定义 Deployment 的更新策略。
+    rollingUpdate: # rollingUpdate: 使用滚动更新策略。
+      maxSurge: 25% # maxSurge: 滚动更新时额外创建的 Pod 数量，最多比原有 Pod 数量多 25%。
+      maxUnavailable: 25% # maxUnavailable: 滚动更新时最多可以不可用的 Pod 数量，最多为原有 Pod 数量的 25%。
+    type: RollingUpdate # type: 使用滚动更新类型（RollingUpdate），保持服务的持续可用性。
+  template: # template: Pod 模板，用于创建 Pod 副本。
+    metadata: # metadata: Pod 的元数据，用于描述 Pod 的基本信息。
+      labels: # labels: Pod 的标签，用于标识由此 Deployment 创建的 Pod。
+        app: nginx-deploy # 标签 `app: nginx-deploy` 确保此 Pod 可以被正确选择和管理。
+    spec: # spec: 描述 Pod 的规格。
+      containers: # containers: 定义 Pod 中的容器。
+        - image: nginx:latest # image: 使用的容器镜像，这里是 nginx 的最新版本。
+          imagePullPolicy: Always # imagePullPolicy: 镜像拉取策略，Always 表示每次启动都从仓库拉取镜像。
+          name: nginx # name: 容器名称，必须在同一 Pod 内唯一。
+          resources: # 这里我们做资源限制, 保证node可以触发 autoscale
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          ports:
+            - containerPort: 80
+      restartPolicy: Always # restartPolicy: 容器重启策略，Always 表示容器崩溃后总是重启。
+      schedulerName: default-scheduler # schedulerName: 调度器名称，指定为默认调度器。
+      terminationGracePeriodSeconds: 30 # terminationGracePeriodSeconds: Pod 删除时优雅终止的等待时间，单位为秒，这里设置为 30 秒。
+

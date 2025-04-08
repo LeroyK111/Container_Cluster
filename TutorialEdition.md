@@ -7035,14 +7035,393 @@ statefulset.apps "web" deleted
 kubectl delete pvc www-web-0
 ```
 ##### DaemonSet
-控制器, 用来控制node上的各种pod的, 类似一种自定义的触发器.
+控制器, 用来控制node上的各种pod的守护进程, 类似一种自定义的触发器.
+![](assets/Pasted%20image%2020250408230837.png)
+![](assets/Pasted%20image%2020250408234006.png)
+三台机器部署了六个微服务, 主业务容器, 通过数据卷保持数据持久化存储.
+如果其中一个SOP出现问题, 则我们需要层层排查,  
+```
+little tips:
+Elasticsearch: ​是一个基于 Apache Lucene 的开源分布式搜索和分析引擎，旨在提供实时的全文搜索功能
+
+Prometheus: 是一个开源的系统监控和报警工具包，最初由 SoundCloud 于 2012 年开发。
+
+Fluentd: 是一个开源的数据收集器，旨在实现日志和事件数据的统一收集、处理和传输。​它通过提供一个统一的日志层，使开发者和数据分析师能够在数据生成时就加以利用，从而更好地理解和使用数据。转发到Elasticsearch 上
+```
+
+这时我们使用daemonset 守护进程 配置 fluentd. 自动完成node全部监控.
+![](assets/Pasted%20image%2020250408235845.png)
+
+###### 写一个实现
+ 三种选择器: nodeselector, nodeaffinity, podaffinity
+```sh
+# 目前在default 中没有 ds
+> kubectl get ds
+No resources found in default namespace.
+```
+
+```sh
+> kubectl get nodes
+NAME             STATUS   ROLES           AGE   VERSION
+docker-desktop   Ready    control-plane   26d   v1.32.2
+
+> kubectl get nodes --show-labels
+NAME             STATUS   ROLES           AGE   VERSION   LABELS
+docker-desktop   Ready    control-plane   26d   v1.32.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=docker-desktop,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+
+# 添加node的标签
+> kubectl label nodes docker-desktop app=windows
+node/docker-desktop labeled
+
+# 展示node标签
+> kubectl get nodes --show-labels
+NAME             STATUS   ROLES           AGE   VERSION   LABELS
+docker-desktop   Ready    control-plane   26d   v1.32.2   app=windows,beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=docker-desktop,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+```
+
+ds模板
+```yaml
+apiVersion: apps/v1 # 使用的 API 版本，DaemonSet 属于 apps 组
+
+kind: DaemonSet # 资源类型，DaemonSet 确保每个节点运行一个 Pod 副本
+
+metadata:
+
+  name: fluentd # DaemonSet 的名称
+
+spec:
+
+  selector:
+
+    matchLabels:
+
+      app: logging # 匹配的 node label
+
+  template: # Pod 模板
+
+    metadata:
+
+      labels:
+
+        app: logging # 应用标签，通常用于服务发现和选择器
+
+        id: fluentd # 自定义标识标签，可用于区分日志组件
+
+      name: fluentd # Pod 的名称
+
+    spec:
+
+      containers:
+
+        - name: fluentd-es # 容器名称
+
+          image: agilestacks/fluentd-elasticsearch:v1.3.0 # 使用的容器镜像（采集并发送日志到 Elasticsearch）
+
+          env:
+
+            - name: FLUENTD_ARGS # 环境变量，用于传递启动参数
+
+              value: -qq # Fluentd 的参数，这里是静默模式（quiet + quiet）
+
+          volumeMounts: # 将主机路径挂载到容器内
+
+            - name: containers
+
+              mountPath: /var/lib/docker/containers # 挂载 Docker 容器元数据
+
+            - name: varlog
+
+              mountPath: /var/log # 挂载日志目录
+
+      volumes: # 定义挂载所使用的实际主机路径
+
+        - hostPath:
+
+            path: /var/lib/docker/containers # 主机路径：Docker 容器元数据存储位置
+
+          name: containers # 卷名称，对应 volumeMounts 中的 name
+
+        - hostPath:
+
+            path: /var/log # 主机路径：系统日志目录
+
+          name: varlog # 卷名称，对应 volumeMounts 中的 name
+```
+
+在上述配置中，`matchLabels` 和 `template.metadata.labels` 都设置为 `app: example`，确保了 Deployment 能够正确地管理其创建的 Pod。​
+
+**注意：**
+
+- `matchLabels` 和 `template.metadata.labels` 的键值对必须完全匹配，包括键和值。​
+    
+- 在 Kubernetes 1.8 及更高版本中，`spec.selector` 是必需的，且必须与 `template.metadata.labels` 匹配，否则会导致创建资源失败。 ​
+    
+
+通过确保这两者的一致性，Kubernetes 控制器才能准确地识别和管理其创建的 Pod，维持系统的稳定和一致性。
+```
+> kubectl create -f .\fluentd_ds.yaml
+daemonset.apps/fluentd created
+
+> kubectl get ds                     
+NAME      DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+fluentd   1         1         0       1            0           <none>          12s
+```
+添加nodeselector:
+```yaml
+apiVersion: apps/v1 # 使用的 API 版本，DaemonSet 属于 apps 组
+
+kind: DaemonSet # 资源类型，DaemonSet 确保每个节点运行一个 Pod 副本
+
+metadata:
+
+  name: fluentd # DaemonSet 的名称
+
+spec:
+
+  selector:
+
+    matchLabels:
+
+      app: logging # 匹配的 node label
+
+  
+
+  template: # Pod 模板
+
+    metadata:
+
+      labels:
+
+        app: logging # 应用标签，通常用于服务发现和选择器
+
+        id: fluentd # 自定义标识标签，可用于区分日志组件
+
+      name: fluentd # Pod 的名称
+
+    spec:
+
+      nodeSelector:
+
+        type: microservices # 给守护容器写上selector
+
+      containers:
+
+        - name: fluentd-es # 容器名称
+
+          image: agilestacks/fluentd-elasticsearch:v1.3.0 # 使用的容器镜像（采集并发送日志到 Elasticsearch）
+
+          env:
+
+            - name: FLUENTD_ARGS # 环境变量，用于传递启动参数
+
+              value: -qq # Fluentd 的参数，这里是静默模式（quiet + quiet）
+
+          volumeMounts: # 将主机路径挂载到容器内
+
+            - name: containers
+
+              mountPath: /var/lib/docker/containers # 挂载 Docker 容器元数据
+
+            - name: varlog
+
+              mountPath: /var/log # 挂载日志目录
+
+      volumes: # 定义挂载所使用的实际主机路径
+
+        - hostPath:
+
+            path: /var/lib/docker/containers # 主机路径：Docker 容器元数据存储位置
+
+          name: containers # 卷名称，对应 volumeMounts 中的 name
+
+        - hostPath:
+
+            path: /var/log # 主机路径：系统日志目录
+
+          name: varlog # 卷名称，对应 volumeMounts 中的 name
+```
+这里我们优先使用apply
+```sh
+> kubectl get po -l app=logging -o wide
+NAME            READY   STATUS    RESTARTS   AGE   IP          NODE             NOMINATED NODE   READINESS GATES
+fluentd-77997   1/1     Running   0          10m   10.1.5.95   docker-desktop   <none>           <none>
+
+> kubectl label node docker-desktop type=microservices
+node/docker-desktop labeled
+
+# 然后我们apply yaml 会报错,只是提示你 kubectl create -f fluentd_ds.yaml --save-config
+# 首次使用apply yaml管理文件
+> kubectl apply -f .\fluentd_ds.yaml
+Warning: resource daemonsets/fluentd is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+daemonset.apps/fluentd configured
+```
+![](assets/Pasted%20image%2020250409004204.png)
+这个ds不推荐使用rollingUpdate, 
+```yaml
+# 改为ondelete
+  updateStrategy:
+
+    type: OnDelete # todo 推荐使用ondelete
+```
+![](assets/Pasted%20image%2020250409005105.png)
+```
+守护进程不需要频繁的更新, node需要ds,则我们就删除对应的ds, 然后就有更新上了
+```
+
+#### HPA自动扩容/缩容
+
+可以对deploy, sts 进行扩容 本质就是增加 replicas
+
+```sh
+PS E:\cloud\Container_Cluster\HPA> kubectl create -f .\nginx_deploy.yaml --save-config
+deployment.apps/nginx-deploy created
 
 
+> kubectl get deploy                
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deploy   1/1     1            1           22s
+
+```
+##### 做资源限制
+
+![](assets/Pasted%20image%2020250409010822.png)
+
+```
+# 修改资源限制
+> kubectl replace -f .\nginx_deploy.yaml             
+deployment.apps/nginx-deploy replaced
+```
+##### 做HPA 自动扩容/缩容
+```sh
+> kubectl autoscale deploy nginx-deploy --cpu-percent=20 --min=2 --max=5
+horizontalpodautoscaler.autoscaling/nginx-deploy autoscaled
+```
+这是用来为 Deployment `nginx-deploy` 创建自动水平扩缩（Horizontal Pod Autoscaler, HPA）的命令。
+
+- `kubectl autoscale`: 创建 HPA 资源。
+    
+- `deploy nginx-deploy`: 针对名为 `nginx-deploy` 的 Deployment。
+    
+- `--cpu-percent=20`: 当 CPU 使用率超过 20% 时触发扩缩。只要触发了最低是2副本, 哪怕小于20
+    
+- `--min=2`: 最小副本数为 2。
+    
+- `--max=5`: 最大副本数为 5。
+
+查看node or pod 的资源占用率
+```sh
+> kubectl top -h
+Display resource (CPU/memory) usage.
+
+ The top command allows you to see the resource consumption for nodes or pods.
+
+ This command requires Metrics Server to be correctly configured and working on the server.
+
+Available Commands:
+  node          Display resource (CPU/memory) usage of nodes
+  pod           Display resource (CPU/memory) usage of pods
+
+Usage:
+  kubectl top [flags] [options]
+
+Use "kubectl top <command> --help" for more information about a given command.
+Use "kubectl options" for a list of global command-line options (applies to all commands).
+```
+
+##### 开启指标服务
+下载 metrics 服务 插件
+```sh
+# 下载
+>kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+# 验证
+kubectl get deployment metrics-server -n kube-system
+```
 
 
+```sh
+windows专用: Invoke-WebRequest -Uri "https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml" -OutFile "components.yaml"
 
+# 修改components.yaml 适合windows和macos
+containers:
+- name: metrics-server
+  image: registry.k8s.io/metrics-server/metrics-server:v0.6.4
+  args:
+    - --cert-dir=/tmp
+    - --secure-port=4443
+    - --kubelet-insecure-tls
+    - --kubelet-preferred-address-types=InternalIP
 
+kubectl apply -f .\components.yaml
+```
 
+```
+# 然后就可以使用了
+> kubectl top pods
+NAME                           CPU(cores)   MEMORY(bytes)   
+nginx-deploy-7669655f8-ccfvw   0m           18Mi
+nginx-deploy-7669655f8-w242x   0m           18Mi
+```
+
+##### 自定义metrics
+```sh
+# 获取所有的hps 触发器
+> kubectl get hpa
+NAME           REFERENCE                 TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+nginx-deploy   Deployment/nginx-deploy   cpu: 0%/20%   2         5         2          33m
+```
+开启控制器, 设置自定义指标, 试下其他功能.
+ 🔹 1. `horizontal-pod-autoscaler-use-rest-clients`
+
+这是 kube-controller-manager 的一个参数，用于控制 HPA 控制器是否使用 REST 客户端访问 Metrics API。
+
+- **作用**：如果这个参数设置为 `true`，HPA 控制器会使用直接的 REST 请求从 Metrics API 中获取 CPU / 内存等指标。
+- **默认行为**：在新版 Kubernetes 中，通常是启用的。
+
+**结论**：只要 Metrics Server 正常运行，你基本不用管这个参数，但它解释了 HPA 获取指标的机制。
+
+---
+
+🔹 2. 控制器管理器的 `--apiserver` 指向 API Server Aggregator
+
+- **解释**：Kubernetes 控制器（比如 HPA 控制器）是运行在 `kube-controller-manager` 中的，它通过 REST API 与 Kubernetes 的 API Server 通信。
+- **Aggregator** 是 API Server 的扩展机制，允许你**聚合额外的 API 服务**（比如 metrics.k8s.io）进来。
+
+---
+
+🔹 3. 在 API Server Aggregator 中注册自定义 metrics API
+
+- 如果你不只用默认的 `metrics-server`，而是希望使用更强大的监控（比如 Prometheus Adapter），你可以将它注册为自定义的 metrics API，比如：
+  - `custom.metrics.k8s.io`
+  - `external.metrics.k8s.io`
+
+通过注册这些 metrics API，可以让 HPA 不仅根据 CPU，还能根据：
+- 请求数
+- 队列长度
+- Redis 队列长度
+- 自定义业务指标
+
+进行自动扩缩。
+
+---
+
+🔧 总结你可以这样用 metrics：
+
+| 用法类型 | 说明 | 工具 |
+|----------|------|------|
+| 默认 HPA | 根据 CPU / 内存 扩缩 | metrics-server |
+| 自定义 HPA | 根据业务指标扩缩 | Prometheus + Prometheus Adapter |
+| 查看指标 | `kubectl top pod`、`kubectl top node` | metrics-server |
+
+---
+ 示例：HPA 使用 CPU 扩容
+
+```bash
+kubectl autoscale deployment nginx-deploy \
+  --cpu-percent=50 --min=2 --max=5
+```
+
+只要 `metrics-server` 正常运行，这个命令就能起作用。
 #### 服务发现
 
 

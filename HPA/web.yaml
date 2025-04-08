@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-web
+  labels:
+    app: nginx-web
+spec:
+  selector:
+    app: nginx-deploy # 与 Deployment 中 Pod 的标签一致
+  type: NodePort # 将服务暴露到集群外
+  ports:
+    - name: web
+      port: 80 # 集群内部访问端口
+      targetPort: 80 # 容器实际监听的端口
+      nodePort: 30080 # 集群外访问使用的端口
