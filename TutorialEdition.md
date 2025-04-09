@@ -7423,11 +7423,106 @@ kubectl autoscale deployment nginx-deploy \
 
 只要 `metrics-server` 正常运行，这个命令就能起作用。
 #### 服务发现
-
-
+一般特指多服务器上, 运行的分布式服务, 用来发现相同 or 彼此依赖的服务.
 ##### Service 服务
+东西流量, 纵向通讯.
+```sh
+> kubectl get svc
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+kubernetes   ClusterIP   10.96.0.1      <none>        443/TCP        27d
+nginx-web    NodePort    10.107.73.86   <none>        80:30080/TCP   22h
+```
+- **NAME**：​服务的名称。​
+    
+    - 例如，`kubernetes` 和 `nginx-web` 是服务的名称。​
+        
+- **TYPE**：​服务的类型，定义了服务的访问方式。常见类型包括：​
+    
+    - `ClusterIP`：​默认类型，分配一个内部集群 IP，服务仅在集群内部可访问。​
+        
+    - `NodePort`：​在每个节点上开放一个静态端口，使服务可以通过 `<NodeIP>:<NodePort>` 从集群外部访问。​[Medium](https://sigridjin.medium.com/understanding-kubernetes-services-nodeport-and-clusterip-2c6a03a94e5d?utm_source=chatgpt.com)
+        
+    - `LoadBalancer`：​使用外部负载均衡器，将服务暴露给外部（通常依赖云提供商）。​
+        
+    - `ExternalName`：​将服务映射到外部的 DNS 名称。​
+        
+- **CLUSTER-IP**：​服务在集群内部的虚拟 IP 地址。​
+    
+    - 例如，`kubernetes` 服务的 Cluster-IP 是 `10.96.0.1`，`nginx-web` 服务的 Cluster-IP 是 `10.107.73.86`。​
+        
+- **EXTERNAL-IP**：​服务的外部 IP 地址，供集群外部访问。​
+    
+    - 在 `ClusterIP` 和 `NodePort` 类型的服务中，通常显示为 `<none>`，表示没有外部 IP。​
+        
+    - 对于 `LoadBalancer` 类型的服务，云提供商会分配一个外部 IP 地址。​
+        
+- **PORT(S)**：​服务的端口信息，格式为 `内部端口:外部端口/协议`。​
+    
+    - 例如，`nginx-web` 服务的 `PORT(S)` 为 `80:30080/TCP`，表示：​
+        
+        - 服务内部使用端口 `80`。
+            
+        - 外部可以通过节点的 IP 地址和端口 `30080` 访问该服务。
+            
+        - 使用的协议是 TCP。
+            
+- **AGE**：​服务的存在时间，表示自创建以来经过的时间。​
+    
+    - 例如，`kubernetes` 服务已存在 `27` 天，`nginx-web` 服务已存在 `22` 小时。​
+
+```sh
+> kubectl get endpoints
+NAME         ENDPOINTS                     AGE
+kubernetes   192.168.65.3:6443             27d
+nginx-web    10.1.5.116:80,10.1.5.117:80   22h
+
+> kubectl get ep       
+NAME         ENDPOINTS                     AGE
+kubernetes   192.168.65.3:6443             27d
+nginx-web    10.1.5.116:80,10.1.5.117:80   22h
+
+# 扩展一个无状态服务deploy
+> kubectl scale deploy nginx-deploy --replicas=3
+deployment.apps/nginx-deploy scaled
+
+# 这三个deploy的用法
+> kubectl get po -l app=nginx-deploy -o wide
+NAME                           READY   STATUS    RESTARTS        AGE     IP           NODE             NOMINATED NODE   READINESS GATES
+nginx-deploy-7669655f8-b6skv   1/1     Running   0               5m24s   10.1.5.118   docker-desktop   <none>           <none>
+nginx-deploy-7669655f8-ccfvw   1/1     Running   1 (5h47m ago)   22h     10.1.5.117   docker-desktop   <none>           <none>
+nginx-deploy-7669655f8-w242x   1/1     Running   1 (5h47m ago)   22h     10.1.5.116   docker-desktop   <none>           <none>
+
+# 这样就三个了虚拟ip了
+> kubectl get ep       
+NAME         ENDPOINTS                                   AGE
+kubernetes   192.168.65.3:6443                           27d
+nginx-web    10.1.5.116:80,10.1.5.117:80,10.1.5.118:80   22h
+
+Service 的流量转发机制
+1. Endpoints 更新：当 Deployment 的副本数量增加时，Kubernetes 会自动更新与 Service 关联的 Endpoints，对应新增的 Pod IP 地址和端口。
+
+2.kube-proxy 组件：运行在每个节点上的 `kube-proxy` 组件会监听 Service 和 Endpoints 的变化，并相应地配置节点的网络规则，以确保流量能够正确地路由到后端的 Pod。
+
+1. 负载均衡策略：`kube-proxy` 支持多种模式来实现流量的负载均衡，包括：
+   - iptables 模式：`kube-proxy` 使用 `iptables` 规则，将流量随机地分发到后端的 Pod。
+   - IPVS 模式：利用 Linux 内核的 IP 虚拟服务器（IPVS）功能，实现更高效的负载均衡。
+```
+网络寻址.
+![](assets/Pasted%20image%2020250410001615.png)
+
+
+
+
+
+
+
+
+
 
 ##### Ingress 进入
+南北流量, 横向通讯.
+
+
 
 
 
@@ -7468,15 +7563,13 @@ kubectl autoscale deployment nginx-deploy \
 ##### 亲和力
 
 
-##### 认证和鉴权
+
 
 
 
 #### 访问控制
 
-
-
-
+##### 认证和鉴权
 
 #### HELM包管理
 
@@ -7488,12 +7581,38 @@ kubectl autoscale deployment nginx-deploy \
 #### 集群日志管理ELK
 
 
-#### 运维管理平台
+#### 运维管理平台dashbord
+
+
 
 
 
 
 #### 微服务案例
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
