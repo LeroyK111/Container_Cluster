@@ -7510,7 +7510,136 @@ Service 的流量转发机制
 网络寻址.
 ![](assets/Pasted%20image%2020250410001615.png)
 
+###### 配置讲解
+```sh
+> kubectl expose deployment nginx-deploy --port=80 --target-port=80 --name=nginx-service --dry-run=client -o yaml > nginx-service.yaml
 
+- `--port=80`：​指定 Service 暴露的端口号为 80。​
+    
+- `--target-port=80`：​指定后端 Pod 的容器端口号为 80。​
+    
+- `--name=nginx-service`：​指定创建的 Service 的名称为 `nginx-service`。​
+    
+- `--dry-run=client`：​在不实际创建资源的情况下，模拟执行命令。​[Baeldung+1Mirantis+1](https://www.baeldung.com/ops/kubectl-generate-yaml-template?utm_source=chatgpt.com)
+    
+- `-o yaml`：​以 YAML 格式输出结果。​[Liam Moat](https://www.liammoat.com/blog/2019/using-kubectl-to-generate-kubernetes-yaml/?utm_source=chatgpt.com)
+    
+- `> nginx-service.yaml`：​将输出重定向到名为 `nginx-service.yaml` 的文件中。​
+```
+
+Container_Cluster\services\nginx-service.yaml
+```yaml
+# 这是一个 Kubernetes 服务定义文件，用于暴露一组 Pod 上的应用程序。
+
+apiVersion: v1 # 指定此对象的 API 版本。对于服务，通常为 'v1'，这是 Kubernetes API 的标准版本。
+
+kind: Service # 表示此 YAML 文件定义了一个服务对象。这是 Kubernetes 对象类型之一，用于网络服务定义。
+
+  
+
+metadata:
+
+  labels:
+
+    app: nginx-svc # 标签是键值对，用于组织和选择 Kubernetes 对象。这里为服务贴上 'app: nginx-svc' 标签，方便后续查询或关联。
+
+  name: nginx-svc # 服务的名称。必须是有效的 RFC 1035 标签名，例如小写字母数字字符或 '-'，以字母数字字符开头和结尾。这是服务的唯一标识符。
+
+  
+
+spec:
+
+  ports:
+
+    - port: 80 # svc内部虚拟端口,多用于内部k8s内部的通讯
+
+      protocol: TCP # 用于此端口的网络协议。这里是 TCP（传输控制协议），是互联网上最常见的协议。
+
+      targetPort: 80 # svc 指向 pod 的端口
+
+      name: web # 此端口的人类可读名称，适用于多端口服务。在这里，名称为“web”，表明这是 Web 流量端口。
+
+      # nodePort: 8080 # 这才是可以裸访问的端口, 并且每个node都会使用这个端口,  非生产环境
+
+  selector:
+
+    app: nginx-deploy # 标签选择器，标识此服务应路由流量的 Pod。这里选择带有标签 'app: nginx-deploy' 的 Pod。这是服务与 Pod 关联的关键字段。
+
+  type: NodePort # 服务类型。'NodePort' 表示在每个节点的 IP 上暴露服务，使用静态端口（默认范围 30000-32767），允许外部访问。这是服务暴露方式之一。
+```
+
+应用文件即可
+```sh
+> kubectl create -f .\nginx-service.yaml --save-config
+service/nginx-svc created
+
+# 其他常用命令
+> kubectl get svc
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+kubernetes   ClusterIP   10.96.0.1      <none>        443/TCP        28d
+nginx-svc    NodePort    10.98.75.134   <none>        80:31253/TCP   29s
+nginx-web    NodePort    10.107.73.86   <none>        80:30080/TCP   44h
+
+> kubectl describe svc nginx-svc
+Name:                     nginx-svc
+Namespace:                default
+Labels:                   app=nginx-svc
+Annotations:              <none>
+Selector:                 app=nginx-deploy
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.98.75.134
+IPs:                      10.98.75.134
+Port:                     web  80/TCP
+TargetPort:               80/TCP
+NodePort:                 web  31253/TCP
+Endpoints:                10.1.5.123:80,10.1.5.124:80
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+```
+###### 基于虚拟网络和dns域名进行访问
+```sh
+# 使用name 本质就是dns虚拟域名进行访问
+> kubectl run -it --image busybox dns-test --restart=Never --rm /bin/sh
+If you don't see a command prompt, try pressing enter.
+
+/ #  wget http://nginx-svc
+Connecting to nginx-svc (10.98.75.134:80)
+saving to 'index.html'
+index.html           100% |***************************************************************************************|   615  0:00:00 ETA 
+'index.html' saved
+
+/ # cat index.html
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+```
+###### 通过ns 也可以访问
+```sh
+/ #  wget http://nginx-svc.default
+Connecting to nginx-svc.default (10.98.75.134:80)
+saving to 'index.html'
+```
+
+###### svc 访问外部服务(k8s之外的服务)
 
 
 
@@ -7521,8 +7650,9 @@ Service 的流量转发机制
 
 ##### Ingress 进入
 南北流量, 横向通讯.
-
-
+```
+暴露 `NodePort` 可能会增加安全风险，建议在生产环境中使用 `LoadBalancer` 或 `Ingress` 来管理外部访问
+```
 
 
 
