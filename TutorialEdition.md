@@ -7640,18 +7640,254 @@ saving to 'index.html'
 ```
 
 ###### svc 访问外部服务(k8s之外的服务)
+```
+通过应用的url访问, 而不是ip访问.
+```
+经常会用到,  主要是一部分服务需要在container 外部运行.
+- 各个环境访问名称统一
+- 访问K8S集群外的服务
+- 项目迁移
 
+```
+> kubectl create -f .\nginx-svc-externer.yaml --save-config
+service/nginx-svc-externer created
+```
+nginx-svc-externer.yaml
+```yaml
+apiVersion: v1
 
+kind: Service
 
+metadata:
 
+  name: nginx-svc-externer
 
+spec:
 
+  type: ClusterIP
 
+  ports:
+
+    - port: 80
+
+      targetPort: 80
+```
+查看服务
+```sh
+> kubectl get svc
+NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+kubernetes           ClusterIP   10.96.0.1      <none>        443/TCP        30d
+nginx-svc            NodePort    10.98.75.134   <none>        80:31253/TCP   2d
+nginx-svc-externer   ClusterIP   10.101.55.57   <none>        80/TCP         2m25s
+
+# 这里就没有ep, 说明我们要自己创建服务发现
+>kubectl get ep 
+NAME         ENDPOINTS                     AGE
+kubernetes   192.168.65.3:6443             30d
+nginx-svc    10.1.5.164:80,10.1.5.165:80   2d
+```
+现在我们创建ep, 访问外部节点
+nginx-svc-externer-ep.yaml
+```yaml
+apiVersion: v1
+
+kind: Endpoints
+
+metadata:
+
+  name: nginx-svc-externer
+
+subsets:
+
+  - addresses:
+
+      - ip: 120.78.159.117
+
+    ports:
+
+      - port: 80
+```
+创建ep
+```sh
+> kubectl create -f .\nginx-svc-externer-ep.yaml --save-config
+endpoints/nginx-svc-externer-ep created
+
+> kubectl get ep     
+NAME                    ENDPOINTS                     AGE
+kubernetes              192.168.65.3:6443             30d
+nginx-svc               10.1.5.164:80,10.1.5.165:80   2d1h
+nginx-svc-externer-ep   120.78.159.117:80             15s
+
+> kubectl describe ep  nginx-svc-externer-ep
+Name:         nginx-svc-externer-ep
+Namespace:    default
+Labels:       app=nginx-svc-externer-ep
+Annotations:  <none>
+Subsets:
+  Addresses:          120.78.159.117
+  NotReadyAddresses:  <none>
+  Ports:
+    Name  Port  Protocol
+    ----  ----  --------
+    web   80    TCP
+
+Events:  <none> 
+```
+进入test容器中
+```sh
+# 创建容器
+> kubectl run -it --image busybox dns-test --restart=Always -- /bin/sh
+If you don't see a command prompt, try pressing enter.
+/ # 
+
+# 进入容器
+>kubectl exec -it dns-test -- /bin/sh
+>/ # wget http://nginx-svc-externer
+Connecting to nginx-svc-externer (10.98.195.184:80)
+Connecting to www.wolfcode.cn (120.78.159.117:80)
+Connecting to www.wolfcode.cn (120.78.159.117:443)
+wget: note: TLS certificate validation not implemented
+saving to 'index.html'
+index.html           100% |***************************************************************************************| 72518  0:00:00 ETA
+'index.html' saved
+```
+![](assets/Pasted%20image%2020250413002456.png)
+这样一来, 外部服务的接口被转发到svc中了, pod内部直接访问ep就可.
+![](assets/Pasted%20image%2020250413003947.png)
+
+###### 通过域名访问外部服务.
+连endpoint都不需要.
+
+nginx-svc-externer copy.yaml
+```yaml
+apiVersion: v1
+
+kind: Service
+
+metadata:
+
+  name: nginx-svc-externer
+
+spec:
+
+  type: ExternalName
+
+  externalName: www.wolfcode.com
+```
+
+```sh
+>kubectl get svc
+NAME                     TYPE           CLUSTER-IP      EXTERNAL-IP        PORT(S)        AGE
+kubernetes               ClusterIP      10.96.0.1       <none>             443/TCP        30d
+nginx-svc                NodePort       10.98.75.134    <none>             80:31253/TCP   2d3h
+nginx-svc-externer       ClusterIP      10.102.208.37   <none>             80/TCP         12m
+nginx-svc-externer-url   ExternalName   <none>          www.wolfcode.com   <none>         6s
+
+kubectl exec -it dns-test -- /bin/sh
+/ # wget nginx-svc-externer-url
+wget: server returned error: HTTP/1.1 403 Forbidden # 对的
+```
+
+以下表格总结了svc四种类型的对比
+
+| 类型           | 描述                          | 主要用途                | 是否暴露外部                 |
+| ------------ | --------------------------- | ------------------- | ---------------------- |
+| ClusterIP    | 在集群内部分配 IP，仅限内部访问。          | 内部服务通信，如微服务间调用。     | 否                      |
+| NodePort     | 通过节点 IP 和静态端口暴露，允许外部访问。     | 开发测试环境，简单外部访问。      | 是，通过 <节点IP>:<NodePort> |
+| LoadBalancer | 使用云负载均衡器外部暴露，适合高可用场景。       | 生产环境，外部流量负载均衡。      | 是，通过云提供商的负载均衡器 IP      |
+| ExternalName | 映射到外部 DNS 名称，通过 CNAME 记录实现。 | 访问外部服务，如外部数据库或 API。 | 是，通过 DNS 解析外部域名        |
+|              |                             |                     |                        |
 ##### Ingress 进入
 南北流量, 横向通讯.
 ```
 暴露 `NodePort` 可能会增加安全风险，建议在生产环境中使用 `LoadBalancer` 或 `Ingress` 来管理外部访问
 ```
+
+###### 拓扑图
+![](assets/Pasted%20image%2020250413010902.png)
+
+###### 安装与使用
+https://kubernetes.io/zh-cn/docs/concepts/services-networking/ingress/
+先安装一个控制器, 我们选择nginx-ingress
+https://kubernetes.io/zh-cn/docs/concepts/services-networking/ingress-controllers/
+![](assets/Pasted%20image%2020250413011830.png)
+本质就是一个web network 网关: 反向代理+路径路由+其他功能
+
+###### windows用法
+```sh
+>choco install kubernetes-helm
+> helm version  
+version.BuildInfo{Version:"v3.17.2", GitCommit:"cc0bbbd6d6276b83880042c1ecb34087e84d41eb", GitTreeState:"clean", GoVersion:"go1.23.7"}
+
+# 添加仓库
+> helm repo add bitnami https://charts.bitnami.com/bitnami
+"bitnami" has been added to your repositories
+> helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx           
+"ingress-nginx" has been added to your repositories
+
+> helm repo list
+NAME            URL
+bitnami         https://charts.bitnami.com/bitnami
+ingress-nginx   https://kubernetes.github.io/ingress-nginx
+
+> helm search repo ingress-nginx
+NAME                            CHART VERSION   APP VERSION     DESCRIPTION
+ingress-nginx/ingress-nginx     4.12.1          1.12.1          Ingress controller for Kubernetes using NGINX a...
+
+# 现在我们安装
+helm pull ingress-nginx/ingress-nginx
+```
+
+###### 配置文件修改
+![](assets/Pasted%20image%2020250413013740.png)
+![](assets/Pasted%20image%2020250413013816.png)
+![](assets/Pasted%20image%2020250413013931.png)
+![](assets/Pasted%20image%2020250413014113.png)
+![](assets/Pasted%20image%2020250413014135.png)
+![](assets/Pasted%20image%2020250413014158.png)
+![](assets/Pasted%20image%2020250413014217.png)
+![](assets/Pasted%20image%2020250413014252.png)
+
+- 创建命名空间
+```sh
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+###### linux/unix 用法
+https://helm.sh/zh/docs/intro/install/
+```sh
+>curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+
+>chmod 700 get_helm.sh && ./get_helm.sh
+```
+
+```
+brew install helm
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
