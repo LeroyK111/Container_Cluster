@@ -8125,11 +8125,6 @@ spec:
 
                   number: 80
 ```
-
-
-
-
-
 ###### linux/unix 用法
 https://helm.sh/zh/docs/intro/install/
 ```sh
