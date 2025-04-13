@@ -105,6 +105,7 @@ controller:
   # since CNI and hostport don't mix yet. Can be deprecated once https://github.com/kubernetes/kubernetes/issues/23920
   # is merged windows端没法部署CNI插件,
   hostNetwork: true
+  # hostNetwork: false
   ## Use host ports 80 and 443
   ## Disabled by default
   hostPort:

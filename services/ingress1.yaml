@@ -3,8 +3,9 @@ kind: Ingress
 metadata:
   name: ingress-nginx-example # Ingress 资源的名称
   # 这里已经弃用
-  # annotations:
+  annotations:
   #   kubernetes.io/ingress.class: "nginx" # 指定使用的 Ingress 控制器为 nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /  # 添加重写规则
 spec:
   ingressClassName: "nginx"
   rules:

@@ -7988,16 +7988,144 @@ spec:
 ingress.networking.k8s.io/ingress-nginx-example configured
 
 > kubectl get ing
-NAME                    CLASS   HOSTS             ADDRESS         PORTS   AGE
-ingress-nginx-example   nginx   k8s.wolfcode.cn   10.96.110.163   80      115s
+NAME                    CLASS   HOSTS             ADDRESS          PORTS   AGE
+ingress-nginx-example   nginx   k8s.wolfcode.cn   10.104.134.141   80      36s
 ```
 
 ok, 这里我们要手动实现 dns 解析, windows直接更改 hosts文件
-```
+```sh
 > kubectl get po -n ingress-nginx -o wide
-NAME                             READY   STATUS    RESTARTS   AGE   IP           NODE             NOMINATED NODE   READINESS GATES
-ingress-nginx-controller-5mh88   1/1     Running   0          65m   10.1.5.184   docker-desktop   <none>           <none>
+NAME                             READY   STATUS    RESTARTS   AGE     IP             NODE             NOMINATED NODE   READINESS GATES
+ingress-nginx-controller-md8dl   1/1     Running   0          4m26s   192.168.65.3   docker-desktop   <none>           <none>
 ```
+![](assets/Pasted%20image%2020250413221424.png)
+这里依然有bug, 可能是没有cni插件, 导致无法访问
+- 临时解决方案
+```sh
+> kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
+Forwarding from 127.0.0.1:8080 -> 80
+Forwarding from [::1]:8080 -> 80
+Handling connection for 8080
+```
+![](assets/Pasted%20image%2020250413231921.png)
+然后访问 http://k8s.wolfcode.cn:8080/api or http://127.0.0.1:8080/api
+
+- 在上述基础上, 我们手动修改nginx svc 映射的路径
+![](assets/Pasted%20image%2020250413235211.png)
+```yaml
+apiVersion: networking.k8s.io/v1
+
+kind: Ingress
+
+metadata:
+
+  name: ingress-nginx-example # Ingress 资源的名称
+
+  # 这里已经弃用
+
+  annotations:
+
+  #   kubernetes.io/ingress.class: "nginx" # 指定使用的 Ingress 控制器为 nginx
+
+    nginx.ingress.kubernetes.io/rewrite-target: /  # 添加重写规则
+
+spec:
+
+  ingressClassName: "nginx"
+
+  rules:
+
+    - host: k8s.wolfcode.cn # 定义的主机名，匹配的请求将应用以下规则
+
+      http:
+
+        paths:
+
+          - path: /api # 匹配的路径前缀 ImplementationSpecific | Exact
+
+            pathType: Prefix # 路径匹配类型，Prefix 表示前缀匹配
+
+            backend:
+
+              service:
+
+                name: nginx-svc # 后端服务的名称
+
+                port:
+
+                  number: 80 # 后端服务的端口号
+```
+保持url后, nginx映射就正确了
+```
+http://k8s.wolfcode.cn:8080/api
+```
+![](assets/Pasted%20image%2020250414000122.png)
+###### 多域名的配置
+
+```yaml
+apiVersion: networking.k8s.io/v1
+
+kind: Ingress
+
+  
+
+# 多域名配置
+
+metadata:
+
+  name: ingress-nginx-example
+
+  annotations:
+
+    nginx.ingress.kubernetes.io/rewrite-target: / # 示例重写规则
+
+spec:
+
+  ingressClassName: nginx # 使用 ingressClassName 指定控制器
+
+  rules:
+
+    - host: k8s.wolfcode.cn
+
+      http:
+
+        paths:
+
+          - path: /
+
+            pathType: Prefix
+
+            backend:
+
+              service:
+
+                name: nginx-svc
+
+                port:
+
+                  number: 80
+
+    - host: api.wolfcode.cn
+
+      http:
+
+        paths:
+
+          - path: /api
+
+            pathType: Exact
+
+            backend:
+
+              service:
+
+                name: nginx-svc
+
+                port:
+
+                  number: 80
+```
+
 
 
 

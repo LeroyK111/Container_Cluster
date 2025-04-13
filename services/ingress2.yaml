@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+# 多域名配置
+metadata:
+  name: ingress-nginx-example
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: / # 示例重写规则
+spec:
+  ingressClassName: nginx # 使用 ingressClassName 指定控制器
+  rules:
+    - host: k8s.wolfcode.cn
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-svc
+                port:
+                  number: 80
+    - host: api.wolfcode.cn
+      http:
+        paths:
+          - path: /api
+            pathType: Exact
+            backend:
+              service:
+                name: nginx-svc
+                port:
+                  number: 80
