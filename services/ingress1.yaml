@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-nginx-example # Ingress 资源的名称
+  # 这里已经弃用
+  # annotations:
+  #   kubernetes.io/ingress.class: "nginx" # 指定使用的 Ingress 控制器为 nginx
+spec:
+  ingressClassName: "nginx"
+  rules:
+    - host: k8s.wolfcode.cn # 定义的主机名，匹配的请求将应用以下规则
+      http:
+        paths:
+          - path: /api # 匹配的路径前缀 ImplementationSpecific | Exact
+            pathType: Prefix # 路径匹配类型，Prefix 表示前缀匹配
+            backend:
+              service:
+                name: nginx-svc # 后端服务的名称
+                port:
+                  number: 80 # 后端服务的端口号

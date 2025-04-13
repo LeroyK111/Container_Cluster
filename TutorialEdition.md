@@ -7847,20 +7847,157 @@ helm pull ingress-nginx/ingress-nginx
 ![](assets/Pasted%20image%2020250413014158.png)
 ![](assets/Pasted%20image%2020250413014217.png)
 ![](assets/Pasted%20image%2020250413014252.png)
-
-- 创建命名空间
+由于docker k8s windows 版本没有cni 插件, 所以我们要记得
 ```sh
+> kubectl get pods -n kube-system
+NAME                                     READY   STATUS    RESTARTS         AGE
+coredns-668d6bf9bc-flv9g                 1/1     Running   47 (4h39m ago)   31d
+coredns-668d6bf9bc-rkn8t                 1/1     Running   47 (4h39m ago)   31d
+etcd-docker-desktop                      1/1     Running   47 (4h39m ago)   31d
+kube-apiserver-docker-desktop            1/1     Running   47 (4h39m ago)   31d
+kube-controller-manager-docker-desktop   1/1     Running   47 (4h39m ago)   31d
+kube-proxy-k6878                         1/1     Running   47 (4h39m ago)   31d
+kube-scheduler-docker-desktop            1/1     Running   47 (4h39m ago)   31d
+metrics-server-7d8d8cb5d9-rqfzn          1/1     Running   19 (4h38m ago)   4d12h
+storage-provisioner                      1/1     Running   88               31d
+vpnkit-controller                        1/1     Running   47 (4h39m ago)   31d
+```
+![](assets/Pasted%20image%2020250413142611.png)
+![](assets/Pasted%20image%2020250413142952.png)
+![](assets/Pasted%20image%2020250413143134.png)
+![](assets/Pasted%20image%2020250413143624.png)
+随后的步骤
+```sh
+> kubectl create ns ingress-nginx
+namespace/ingress-nginx created
 
+> kubectl label node docker-desktop ingress=true
+node/docker-desktop labeled
+
+# 进入values.yaml 安装即可,
+>helm install ingress-nginx -n ingress-nginx .
+NAME: ingress-nginx
+LAST DEPLOYED: Sun Apr 13 14:38:17 2025
+NAMESPACE: ingress-nginx
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+The ingress-nginx controller has been installed.
+Get the application URL by running these commands:
+  export POD_NAME="$(kubectl get pods --namespace ingress-nginx --selector app.kubernetes.io/name=ingress-nginx,app.kubernetes.io/instance=ingress-nginx,app.kubernetes.io/component=controller --output jsonpath="{.items[0].metadata.name}")"
+  kubectl port-forward --namespace ingress-nginx "${POD_NAME}" 8080:80
+  echo "Visit http://127.0.0.1:8080 to access your application."
+
+An example Ingress that makes use of the controller:
+  apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+    name: example
+    namespace: foo
+  spec:
+    ingressClassName: nginx
+    rules:
+      - host: www.example.com
+        http:
+          paths:
+            - pathType: Prefix
+              backend:
+                service:
+                  name: exampleService
+                  port:
+                    number: 80
+              path: /
+    # This section is only required if TLS is to be enabled for the Ingress
+    tls:
+      - hosts:
+        - www.example.com
+        secretName: example-tls
+
+If TLS is enabled for the Ingress, a Secret containing the certificate and key must also be provided:      
+
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: example-tls
+    namespace: foo
+  data:
+    tls.crt: <base64 encoded cert>
+    tls.key: <base64 encoded key>
+  type: kubernetes.io/tls
+```
+直接安装成功.
+```
+> kubectl get po -n ingress-nginx
+NAME                             READY   STATUS    RESTARTS   AGE
+ingress-nginx-controller-5mh88   1/1     Running   0          2m41s
+```
+###### 异常处理
+
+污点: k8s 不推荐ingress 装在master node 
+![](assets/Pasted%20image%2020250413144151.png)
+```sh
+# 加个标签到slave1上
+>kubectl label no node-slave1 ingress=true
+```
+###### 使用ingress-nginx
+```yaml
+apiVersion: networking.k8s.io/v1
+
+kind: Ingress
+
+metadata:
+
+  name: ingress-nginx-example # Ingress 资源的名称
+
+  # 这里已经弃用
+
+  # annotations:
+
+  #   kubernetes.io/ingress.class: "nginx" # 指定使用的 Ingress 控制器为 nginx
+
+spec:
+
+  ingressClassName: "nginx"
+
+  rules:
+
+    - host: k8s.wolfcode.cn # 定义的主机名，匹配的请求将应用以下规则
+
+      http:
+
+        paths:
+
+          - path: /api # 匹配的路径前缀
+
+            pathType: Prefix # 路径匹配类型，Prefix 表示前缀匹配
+
+            backend:
+
+              service:
+
+                name: nginx-svc # 后端服务的名称
+
+                port:
+
+                  number: 80 # 后端服务的端口号
 ```
 
+```sh
+> kubectl apply -f .\ingress1.yaml
+ingress.networking.k8s.io/ingress-nginx-example configured
 
+> kubectl get ing
+NAME                    CLASS   HOSTS             ADDRESS         PORTS   AGE
+ingress-nginx-example   nginx   k8s.wolfcode.cn   10.96.110.163   80      115s
+```
 
-
-
-
-
-
-
+ok, 这里我们要手动实现 dns 解析, windows直接更改 hosts文件
+```
+> kubectl get po -n ingress-nginx -o wide
+NAME                             READY   STATUS    RESTARTS   AGE   IP           NODE             NOMINATED NODE   READINESS GATES
+ingress-nginx-controller-5mh88   1/1     Running   0          65m   10.1.5.184   docker-desktop   <none>           <none>
+```
 
 
 
@@ -7876,7 +8013,6 @@ https://helm.sh/zh/docs/intro/install/
 ```
 brew install helm
 ```
-
 
 
 
