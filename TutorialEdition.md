@@ -8137,28 +8137,32 @@ https://helm.sh/zh/docs/intro/install/
 brew install helm
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 #### 配置与存储
 
 ##### 配置管理
 
+###### configMap 
+
+###### 加密数据配置Secret
+
+###### subPath的使用
+
+
+###### 配置的热更新
+
+###### 不可变的secret和configMap
+
+
+
 
 ##### 存储管理
 
+###### Volumes
 
-##### NFS
+
+
+
+###### NFS挂载
 
 
 ##### PV与PVC
