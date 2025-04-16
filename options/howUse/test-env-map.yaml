@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-env-map
+spec:
+  containers:
+    - name: env-test
+      image: alpine
+      command: ["/bin/sh", "-c", "env; sleep 3600"]
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+      env:
+        - name: java
+          valueFrom:
+            configMapKeyRef: # 从cm文件映射进入容器
+              name: test-env-map
+              key: java
+        - name: k2
+          valueFrom:
+            configMapKeyRef:
+              name: test-env-map
+              key: k2
+  restartPolicy: Never

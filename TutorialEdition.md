@@ -8336,8 +8336,235 @@ Events:  <none>
 ```
 
 - 如何使用cm
+```sh
+> kubectl create cm test-env-map --from-literal=java='-xms512m' --from-literal=k2=c2
+configmap/test-env-map created
+
+> kubectl describe cm test-env-map
+Name:         test-env-map
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+java:
+----
+-xms512m
+k2:
+----
+c2
+
+BinaryData
+====
+
+Events:  <none>
 ```
 
+创建pod, 映射cm到container中
+
+```
+apiVersion: v1
+
+kind: pod
+
+metedate:
+
+  name: test-env
+
+spec:
+
+  containers:
+
+    - name: env-test # 容器名称，必须唯一
+
+      image: alpine # 使用的镜像是 alpine，一个体积小的 Linux 镜像
+
+      command: ["/bin/sh", "-c", "env; sleep 3600"] # 容器启动命令，这里先输出环境变量，然后 sleep 一小时保持运行
+
+      imagePullPolicy: IfNotPresent # 如果本地没有镜像就拉取，已有就复用
+
+      resources: # 容器的资源限制，避免 "noisy neighbor" 问题
+
+        requests: # 最小资源请求（调度时的保证资源）
+
+          cpu: "100m" # 最小请求 CPU 100 毫核
+
+          memory: "64Mi" # 最小请求内存 64Mi
+
+        limits: # 最大资源使用限制（不允许超出）
+
+          cpu: "200m" # 最多使用 200 毫核 CPU
+
+          memory: "128Mi" # 最多使用 128Mi 内存
+
+      env: # 容器内的环境变量配置
+
+        - name: java # 定义一个环境变量 java
+
+          valueFrom:
+
+            configMapKeyRef: # 从 ConfigMap 中引用
+
+              name: test-env-map # 指定的 ConfigMap 名称
+
+              key: java # 读取 ConfigMap 中 key 为 java 的值
+
+        - name: k2 # 定义第二个环境变量 k2
+
+          valueFrom:
+
+            configMapKeyRef: # 同样从 ConfigMap 中读取
+
+              name: test-env-map # 使用相同的 ConfigMap
+
+              key: k2 # 读取 k2 的值
+```
+- 环境映射用法
+```sh
+> kubectl apply -f test-env-map.yaml
+pod/test-env-map created
+> kubectl get po
+NAME                           READY   STATUS              RESTARTS         AGE
+dns-test                       1/1     Running             5 (5h15m ago)    4d
+nginx-deploy-7669655f8-ccfvw   1/1     Running             10 (5h15m ago)   7d22h
+nginx-deploy-7669655f8-w242x   1/1     Running             10 (5h15m ago)   7d22h
+test-env-map                   0/1     ContainerCreating   0                9s
+
+# 打印日志
+> kubectl logs -f test-env-map 
+NGINX_SVC_SERVICE_HOST=10.98.75.134
+NGINX_SVC_EXTERNER_PORT_80_TCP=tcp://10.102.208.37:80
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_PORT=tcp://10.96.0.1:443
+HOSTNAME=test-env-map
+SHLVL=1
+HOME=/root
+java=-xms512m # 完美
+NGINX_SVC_SERVICE_PORT=80
+NGINX_SVC_PORT=tcp://10.98.75.134:80
+NGINX_SVC_SERVICE_PORT_WEB=80
+NGINX_SVC_PORT_80_TCP_ADDR=10.98.75.134
+NGINX_SVC_EXTERNER_SERVICE_HOST=10.102.208.37
+NGINX_SVC_PORT_80_TCP_PORT=80
+NGINX_SVC_PORT_80_TCP_PROTO=tcp
+KUBERNETES_PORT_443_TCP_ADDR=10.96.0.1
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+NGINX_SVC_EXTERNER_PORT=tcp://10.102.208.37:80
+KUBERNETES_PORT_443_TCP_PORT=443
+NGINX_SVC_EXTERNER_SERVICE_PORT=80
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+NGINX_SVC_PORT_80_TCP=tcp://10.98.75.134:80
+NGINX_SVC_EXTERNER_PORT_80_TCP_ADDR=10.102.208.37
+KUBERNETES_PORT_443_TCP=tcp://10.96.0.1:443
+NGINX_SVC_EXTERNER_PORT_80_TCP_PORT=80
+KUBERNETES_SERVICE_PORT_HTTPS=443
+NGINX_SVC_EXTERNER_PORT_80_TCP_PROTO=tcp
+KUBERNETES_SERVICE_HOST=10.96.0.1
+PWD=/
+k2=c2 # 完美
+```
+- 数据卷挂载: configmap, secret
+```yaml
+apiVersion: v1
+
+kind: Pod
+
+metadata:
+
+  name: test-file
+
+spec:
+
+  containers:
+
+    - name: env-test
+
+      image: alpine
+
+      command: ["/bin/sh", "-c", "env; sleep 3600"]
+
+      imagePullPolicy: IfNotPresent
+
+      resources:
+
+        requests:
+
+          cpu: "100m"
+
+          memory: "64Mi"
+
+        limits:
+
+          cpu: "200m"
+
+          memory: "128Mi"
+
+      env:
+
+        - name: java
+
+          valueFrom:
+
+            configMapKeyRef: # 从cm文件映射进入容器
+
+              name: test-env-map
+
+              key: java
+
+        - name: k2
+
+          valueFrom:
+
+            configMapKeyRef:
+
+              name: test-env-map
+
+              key: k2
+
+      volumeMounts: # 与 volumes 中的 name 一致
+
+        - mountPath: /etc/config # 将volumes加载到哪个路径下
+
+          name: db-config # 与volumes name一致
+
+          readOnly: true
+
+  volumes:
+
+    - name: db-config
+
+      configMap:
+
+        name: test-config # 这里写cm名字
+
+        items: #不指定, 则所有映射为文件
+
+          - key: db.properties # 将key对应的value提取出来
+
+            path: db.p # 转为文件, 自己命名
+
+  restartPolicy: Never
+```
+余下的命令
+```sh
+> kubectl apply -f .\test-file.yaml 
+pod/test-file created
+
+> kubectl get po                   
+NAME                           READY   STATUS    RESTARTS         AGE
+dns-test                       1/1     Running   5 (5h36m ago)    4d
+nginx-deploy-7669655f8-ccfvw   1/1     Running   10 (5h36m ago)   7d22h
+nginx-deploy-7669655f8-w242x   1/1     Running   10 (5h36m ago)   7d22h
+test-file                      1/1     Running   0                18s
+
+> kubectl exec -it test-file  -- sh
+/ # cd /etc/config/
+/etc/config # ls
+db.p
+/etc/config # cat db.p
+username=root
+password=admin
 ```
 
 
@@ -8346,6 +8573,7 @@ Events:  <none>
 
 
 ###### subPath的使用
+
 
 
 ###### 配置的热更新
