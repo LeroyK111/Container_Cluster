@@ -8141,19 +8141,209 @@ brew install helm
 
 ##### 配置管理
 ###### configMap 
+不会的命令敲cm
+```sh
+> kubectl create configmap -h
+Create a config map based on a file, directory, or specified literal value.
 
+ A single config map may package one or more key/value pairs.
 
+ When creating a config map based on a file, the key will default to the basename of the file, and the value will
+default to the file content.  If the basename is an invalid key, you may specify an alternate key.
 
+ When creating a config map based on a directory, each file whose basename is a valid key in the directory will be
+packaged into the config map.  Any directory entries except regular files are ignored (e.g. subdirectories, symlinks,
+devices, pipes, etc).
 
+Aliases:
+configmap, cm
 
+Examples:
+  # 映射文件夹
+  kubectl create configmap my-config --from-file=path/to/bar
 
+  # 自定义key 然后再去映射文件夹
+  kubectl create configmap my-config --from-file=key1=/path/to/bar/file1.txt --from-file=key2=/path/to/bar/file2.txt
 
+  # 手动映射 kv键值对
+  kubectl create configmap my-config --from-literal=key1=config1 --from-literal=key2=config2
 
+  # 映射文件夹
+  kubectl create configmap my-config --from-file=path/to/bar
 
+  # 映射环境变量
+  kubectl create configmap my-config --from-env-file=path/to/foo.env --from-env-file=path/to/bar.env
 
+Options:
+    --allow-missing-template-keys=true:
+        If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to
+        golang and jsonpath output formats.
+
+    --append-hash=false:
+        Append a hash of the configmap to its name.
+
+    --dry-run='none':
+        Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without
+        sending it. If server strategy, submit server-side request without persisting the resource.
+
+    --field-manager='kubectl-create':
+        Name of the manager used to track field ownership.
+
+    --from-env-file=[]:
+        Specify the path to a file to read lines of key=val pairs to create a configmap.
+
+    --from-file=[]:
+        Key file can be specified using its file path, in which case file basename will be used as configmap key, or
+        optionally with a key and file path, in which case the given key will be used.  Specifying a directory will
+        iterate each named file in the directory whose basename is a valid configmap key.
+
+    --from-literal=[]:
+        Specify a key and literal value to insert in configmap (i.e. mykey=somevalue)
+
+    -o, --output='':
+        Output format. One of: (json, yaml, name, go-template, go-template-file, template, templatefile, jsonpath,
+        jsonpath-as-json, jsonpath-file).
+
+    --save-config=false:
+        If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will
+        be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+
+    --show-managed-fields=false:
+        If true, keep the managedFields when printing objects in JSON or YAML format.
+
+    --template='':
+        Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format
+        is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+
+    --validate='strict':
+        Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate
+        the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation
+        is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will
+        warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled
+        on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema
+        validation, silently dropping any unknown or duplicate fields.
+
+Usage:
+  kubectl create configmap NAME [--from-file=[key=]source] [--from-literal=key1=value1] [--dry-run=server|client|none]
+[options]
+
+Use "kubectl options" for a list of global command-line options (applies to all commands).
+```
+创建两个文件
+![](assets/Pasted%20image%2020250416214944.png)
+- 挂载配置文件夹
+```sh
+# 挂载配置文件夹
+>kubectl create configmap test-config --from-file=.
+# 查看所有配置文件
+> kubectl get cm
+NAME               DATA   AGE
+kube-root-ca.crt   1      34d
+test-config        2      16s
+
+# 查看明文信息
+>kubectl describe cm test-config      
+Name:         test-config
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+db.properties:
+----
+username=root\r
+password=admin
+redis.properties:
+----
+host=127.0.0.1\r
+port=6379
+
+BinaryData
+====
+
+Events:  <none>
+```
+- 挂载文件
+```sh
+# 挂载文件
+kubectl create configmap my-config --from-file=key1=./file1.txt --from-file=key2=./file2.txt
+
+> kubectl get cm                                                           
+NAME               DATA   AGE
+kube-root-ca.crt   1      34d
+my-config          2      17s
+test-config        2      24m
+
+> kubectl describe cm my-config                                            
+Name:         my-config
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+key1:
+----
+spring=1123\r
+a=2
+key2:
+----
+spring=112322\r
+a=223123
+
+BinaryData
+====
+
+Events:  <none>
+
+# 精准获取key1
+> kubectl get configmap my-config -o jsonpath="{.data.key1}"
+spring=1123
+a=2
+```
+- 手动映射键值对
+```sh
+> kubectl create configmap kv-map --from-literal=k1=1 --from-literal=k2=c2
+configmap/kv-map created
+
+> kubectl get cm                    
+NAME               DATA   AGE
+kube-root-ca.crt   1      34d
+kv-map             2      20s
+my-config          2      16m
+test-config        2      40m
+
+> kubectl describe cm kv-map   
+Name:         kv-map
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+k1:
+----
+1
+k2:
+----
+c2
+
+BinaryData
+====
+
+Events:  <none>
+```
+
+- 如何使用cm
+```
+
+```
 
 
 ###### 加密数据配置Secret
+
+
 
 ###### subPath的使用
 
