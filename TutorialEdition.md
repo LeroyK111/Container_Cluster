@@ -8567,15 +8567,261 @@ username=root
 password=admin
 ```
 ###### 加密数据配置Secret
+数据加密, 更多是
+```sh
+> kubectl create secret --help
+Create a secret with specified type.
+
+ A docker-registry type secret is for accessing a container registry.
+
+ A generic type secret indicate an Opaque secret type.
+
+ A tls type secret holds TLS certificate and its associated key.
+
+Available Commands:
+  docker-registry   创建一个给 Docker registry 使用的 Secret
+  generic           Create a secret from a local file, directory, or literal value
+  tls               创建一个 TLS secret
+
+Usage:
+  kubectl create secret (docker-registry | generic | tls) [options]
+
+Use "kubectl create secret <command> --help" for more information about a given command.
+Use "kubectl options" for a list of global command-line options (applies to all commands).
+```
+支持kv字典创建,  secret没有缩写表示
+```sh
+> kubectl create secret generic orig-secret --from-literal=username=admin
+
+# 如果存在特殊符号, 则需要加引号
+> kubectl create secret generic orig-secret --from-literal=password='ds@!3-/'
+
+# 映射文件
+kubectl create secret generic orig-secret --from-file=text.txt
+# 映射文件夹
+kubectl create secret generic orig-secret --from-directory=/apt/etx/
+
+# 找到所有的私有配置
+> kubectl get secret
+NAME          TYPE     DATA   AGE
+orig-secret   Opaque   1      8m23s
+
+# 已经加密
+> kubectl describe secret orig-secret
+Name:         orig-secret
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Type:  Opaque
+
+Data
+====
+username:  5 bytes # 安全性不高, 其实是加解码 类似base64
+```
+- 镜像地址用法:
+```sh
+>kubectl create secret docker-registry my-registry-secret \
+  --docker-server=DOCKER_REGISTRY_SERVER \
+  --docker-username=DOCKER_USER \
+  --docker-password=DOCKER_PASSWORD \
+  --docker-email=DOCKER_EMAIL
+
+- `my-registry-secret`：Secret 的名称。
+    
+- `DOCKER_REGISTRY_SERVER`：私有仓库的地址，例如 `https://index.docker.io/v1/`。
+    
+- `DOCKER_USER`：用于认证的用户名。
+    
+- `DOCKER_PASSWORD`：用于认证的密码。
+    
+- `DOCKER_EMAIL`：用户的电子邮件地址。
+
+# 一般都是从 harbor 上拉取镜像
+> kubectl create secret docker-registry my-registry-secret --docker-password=wolfcode --docker-email=lang@workf.com --docker-username=admin --docker-server=192.                  
+secret/my-registry-secret createds
+
+> kubectl get secret                
+NAME                 TYPE                             DATA   AGE
+my-registry-secret   kubernetes.io/dockerconfigjson   1      34s
+orig-secret          Opaque                           1      3h15m
+
+>kubectl edit secret  my-registry-secret
+```
+![](assets/Pasted%20image%2020250418001115.png)
+拉取image时, 链接私有仓库地址即可
+```yaml
+spec:
+  containers:
+    - name: my-container
+      image: myregistry.example.com/my-image:tag
+  imagePullSecrets:
+    - name: my-registry-secret
+```
+- TLS证书验证
+```sh
+>kubectl create secret tls my-tls-secret \
+  --cert=path/to/tls.crt \
+  --key=path/to/tls.key
+```
+配置协议
+```yml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-ingress
+spec:
+  tls:
+    - hosts:
+        - example.com
+      secretName: my-tls-secret
+  rules:
+    - host: example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: example-service
+                port:
+                  number: 80
+
+```
+###### subPath 的使用
+```sh
+> kubectl get pod
+NAME                           READY   STATUS      RESTARTS      AGE
+dns-test                       1/1     Running     7 (6h ago)    5d1h
+nginx-deploy-7669655f8-ccfvw   1/1     Running     12 (6h ago)   8d
+nginx-deploy-7669655f8-w242x   1/1     Running     12 (6h ago)   8d
+test-file                      0/1     Completed   0  
+
+# 执行命令
+> kubectl exec -it nginx-deploy-7669655f8-w242x -- ls /
+bin   dev                  docker-entrypoint.sh  home  lib64  mnt  proc  run   srv  tmp  var
+boot  docker-entrypoint.d  etc                   lib   media  opt  root  sbin  sys  usr
 
 
+```
+
+```sh
+# 查看配置文件
+> kubectl exec -it nginx-deploy-7669655f8-w242x -- cat /etc/nginx/nginx.conf
+
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log notice;
+pid        /run/nginx.pid;
 
 
-###### subPath的使用
+events {
+    worker_connections  1024;
+}
 
 
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+```
+
+创建配置映射
+```sh
+> kubectl create cm nginx-conf-cm --from-file=./nginx.conf
+configmap/nginx-conf-cm created
+
+>kubectl describe cm nginx-conf-cm
+
+```
+
+将nginx内部的配置文件暴漏出来, 使用volumes挂载.
+![](assets/Pasted%20image%2020250418004520.png)
+这样使用容器卷会导致 目录的完全覆盖. 这里就需要用subpath 来进行 . 
+![](assets/Pasted%20image%2020250418005553.png)
+完整举例
+```yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "3"
+  creationTimestamp: "2025-04-08T17:00:08Z"
+  generation: 6
+  labels:
+    app: nginx-deploy
+  name: nginx-deploy
+  namespace: default
+  resourceVersion: "1461468"
+  uid: 219a132c-afa0-4cbb-ae72-4a46cbdd6508
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: nginx-deploy
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: nginx-deploy
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: nginx-conf-cm
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+
+```
 
 ###### 配置的热更新
+
+
 
 ###### 不可变的secret和configMap
 
