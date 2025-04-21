@@ -8820,23 +8820,201 @@ spec:
 ```
 
 ###### 配置的热更新
+创建两个配置参数.
+```
+apiVersion: v1
 
+kind: ConfigMap
+
+metadata:
+
+  name: app-config
+
+data:
+
+  app.properties: |
+
+    app.name=myApp
+
+    app.env=production
+
+---
+
+apiVersion: v1
+
+kind: Secret
+
+metadata:
+
+  name: app-secret
+
+type: Opaque
+
+stringData:
+
+  db.password: superSecretPassword
+```
+pod配置文件
+```yml
+# app-pod.yaml
+
+apiVersion: v1
+
+kind: Pod
+
+metadata:
+
+  name: demo-app
+
+spec:
+
+  containers:
+
+    - name: demo-container
+
+      image: busybox
+
+      command:
+
+        - /bin/sh
+
+        - -c
+
+        - |
+
+          while true; do
+
+            echo "==== ConfigMap ===="
+
+            cat /etc/config/app.properties
+
+            echo -e "\n"
+
+            echo "==== Secret ===="
+
+            cat /etc/secret/db.password
+
+            sleep 10
+
+          done
+
+      volumeMounts:
+
+        - name: config-volume
+
+          mountPath: /etc/config
+
+        - name: secret-volume
+
+          mountPath: /etc/secret
+
+      resources: # 增加资源限制
+
+        requests: # 最小资源请求（调度时的保证资源）
+
+          cpu: "100m"
+
+          memory: "128Mi"
+
+        limits: # 最大资源使用限制（不允许超出）
+
+          cpu: "200m"
+
+          memory: "256Mi"
+
+  volumes:
+
+    - name: config-volume
+
+      configMap:
+
+        name: app-config
+
+    - name: secret-volume
+
+      secret:
+
+        secretName: app-secret
+
+```
+- 默认方式
+会更新, 更新周期是更新时间+缓存时间
+![](assets/Pasted%20image%2020250421211112.png)
+```sh
+# 修改配置文件
+> kubectl edit cm app-config
+configmap/app-config edited
+
+# 动态化
+> kubectl logs demo-app -f
+==== Secret ====
+superSecretPassword==== ConfigMap ====
+app.name=myApp-111
+app.env=production-111
+==== Secret ====
+
+# 生成yaml文件
+> kubectl get configmap app-config -o yaml > myConfig.yaml
+```
+![](assets/Pasted%20image%2020250421213239.png)
+
+```sh
+> kubectl describe cm app-config
+Name:         app-config
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+app.properties:
+----
+app.name=myApp
+app.env=production
+
+
+BinaryData
+====
+
+Events:  <none>
+```
+![](assets/Pasted%20image%2020250421214054.png)
+可以看到更新完毕了.
+- subpath
+默认不更新, 使用软链接可以间接更新subpath文件
+![](assets/Pasted%20image%2020250421214313.png)
+![](assets/Pasted%20image%2020250421215142.png)
+
+- 变量形式
+![](assets/Pasted%20image%2020250421214341.png)
 
 
 ###### 不可变的secret和configMap
+如果考虑线上环境的稳定性, 我们有必要no change.
 
+```sh
+> kubectl edit cm app-config 
+configmap/app-config edited
 
-
+加入immutable: true
+```
+![](assets/Pasted%20image%2020250421215552.png)
+这里就不会允许你再次修改了
+![](assets/Pasted%20image%2020250421215707.png)
 
 ##### 存储管理
-
+持久化存储.
 ###### Volumes
+容器卷技术, 本身就是映射管理.
+
+
+
 
 
 
 
 ###### NFS挂载
-
+网络文件系统.
 
 ##### PV与PVC
 

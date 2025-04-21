@@ -1,0 +1,40 @@
+# app-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-app
+spec:
+  containers:
+    - name: demo-container
+      image: busybox
+      command:
+        - /bin/sh
+        - -c
+        - |
+          while true; do
+            echo "==== ConfigMap ===="
+            cat /etc/config/app.properties
+            echo -e "\n"
+            echo "==== Secret ===="
+            cat /etc/secret/db.password
+            sleep 10
+          done
+      volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+        - name: secret-volume
+          mountPath: /etc/secret
+      resources: # 增加资源限制
+        requests: # 最小资源请求（调度时的保证资源）
+          cpu: "100m"
+          memory: "128Mi"
+        limits: # 最大资源使用限制（不允许超出）
+          cpu: "200m"
+          memory: "256Mi"
+  volumes:
+    - name: config-volume
+      configMap:
+        name: app-config
+    - name: secret-volume
+      secret:
+        secretName: app-secret
