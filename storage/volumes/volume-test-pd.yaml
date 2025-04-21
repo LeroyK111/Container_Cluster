@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-volume-pd
+spec:
+  containers:
+    - name: nginx-volume
+      image: nginx
+      volumeMounts:
+        - mountPath: /test-pd # 挂载到容器内的哪个目录
+          name: test-volume # 关联下面定义的 volume 名称
+      resources:
+        requests:
+          cpu: "100m" # 至少保证 0.1 个核心
+          memory: "64Mi" # 至少保证 64MiB 内存
+        limits:
+          cpu: "200m" # 最大使用 0.2 个核心
+          memory: "128Mi" # 最大使用 128MiB 内存
+  volumes:
+    - name: test-volume # 定义的 volume 名称
+      hostPath:
+        # 将 E:\cloud\Container_Cluster\storage\data 转换成 /run/desktop/mnt/host/e/cloud/Container_Cluster/storage/
+        path: /run/desktop/mnt/host/e/cloud/Container_Cluster/storage/data
+        # 节点上的目录（宿主机路径）
+        type: Directory # 检查目录类型，可以是 Directory、File、Socket 等
+

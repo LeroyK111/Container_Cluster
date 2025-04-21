@@ -9005,7 +9005,77 @@ configmap/app-config edited
 ##### 存储管理
 持久化存储.
 ###### Volumes
+
+- hostpath 主机与容器映射
 容器卷技术, 本身就是映射管理.
+![](assets/Pasted%20image%2020250421223030.png)
+```yaml
+apiVersion: v1
+
+kind: Pod
+
+metadata:
+
+  name: test-volume-pd
+
+spec:
+
+  containers:
+
+    - name: nginx-volume
+
+      image: nginx
+
+      volumeMounts:
+
+        - mountPath: /test-pd # 挂载到容器内的哪个目录
+
+          name: test-volume # 关联下面定义的 volume 名称
+
+      resources:
+
+        requests:
+
+          cpu: "100m" # 至少保证 0.1 个核心
+
+          memory: "64Mi" # 至少保证 64MiB 内存
+
+        limits:
+
+          cpu: "200m" # 最大使用 0.2 个核心
+
+          memory: "128Mi" # 最大使用 128MiB 内存
+
+  volumes:
+
+    - name: test-volume # 定义的 volume 名称
+
+      hostPath:
+
+        # 将 E:\cloud\Container_Cluster\storage\data 转换成 /run/desktop/mnt/host/e/cloud/Container_Cluster/storage/
+
+        path: /run/desktop/mnt/host/e/cloud/Container_Cluster/storage/data
+
+        # 节点上的目录（宿主机路径）
+
+        type: Directory # 检查目录类型，可以是 Directory、File、Socket 等
+```
+必须要注意windows路径转换
+```
+> kubectl  create -f .\volume-test-pd.yaml --save-config
+pod/test-volume-pd created
+```
+![](assets/Pasted%20image%2020250421225817.png)
+
+这样就形成了映射关系.
+
+- emptyDir 空文件夹映射
+不是为了持久化, 为了实现一个pod中多个 container 的管理.
+![](assets/Pasted%20image%2020250421230752.png)
+
+
+
+
 
 
 
