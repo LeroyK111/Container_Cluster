@@ -9072,11 +9072,98 @@ pod/test-volume-pd created
 - emptyDir 空文件夹映射
 不是为了持久化, 为了实现一个pod中多个 container 的管理.
 ![](assets/Pasted%20image%2020250421230752.png)
+```yaml
+apiVersion: v1
 
+kind: Pod
 
+metadata:
 
+  name: empty-pod
 
+  labels:
 
+    name: empty-pod
+
+spec:
+
+  containers:
+
+    - name: empty-pod1
+
+      image: alpine
+
+      command: ["bin/sh", "-c", "sleep 3600;"]
+
+      volumeMounts:
+
+        - mountPath: /cache
+
+          name: cache-volume
+
+      resources:
+
+        limits:
+
+          memory: "128Mi"
+
+          cpu: "500m"
+
+        requests:
+
+          cpu: "100m"
+
+          memory: "100Mi"
+
+    - name: empty-pod2
+
+      image: alpine
+
+      command: ["bin/sh", "-c", "sleep 3600;"]
+
+      volumeMounts:
+
+        - mountPath: /opt
+
+          name: cache-volume
+
+      resources:
+
+        limits:
+
+          memory: "128Mi"
+
+          cpu: "500m"
+
+        requests:
+
+          cpu: "100m"
+
+          memory: "100Mi"
+
+  volumes:
+
+    - name: cache-volume
+
+      emptyDir: {}
+```
+
+```sh
+> kubectl apply -f .\volume-multiple-emptydir.yaml
+pod/empty-pod created
+> kubectl get po
+NAME                            READY   STATUS              RESTARTS        AGE
+demo-app                        1/1     Running             1 (5h6m ago)    26h
+dns-test                        1/1     Running             14 (5h6m ago)   10d
+empty-pod                       0/2     ContainerCreating   0               6s
+nginx-deploy-65f5b4d495-jf5lc   1/1     Running             7 (5h6m ago)    4d22h
+nginx-deploy-65f5b4d495-xlb6r   1/1     Running             7 (5h6m ago)    4d22h
+test-file                       0/1     Completed           0               5d23h
+test-volume-pd                  1/1     Running             1 (5h6m ago)    24h
+
+# in containers
+> kubectl exec -it empty-pod -c empty-pod1 -- sh
+```
 
 
 
