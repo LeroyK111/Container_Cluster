@@ -9163,30 +9163,305 @@ test-volume-pd                  1/1     Running             1 (5h6m ago)    24h
 
 # in containers
 > kubectl exec -it empty-pod -c empty-pod1 -- sh
+> kubectl exec -it empty-pod -c empty-pod2 -- sh
 ```
-
-
-
-
-
+![](assets/Pasted%20image%2020250423222346.png)
+如果pod被删除了,  容器内的emptyDir 都会被删除.
 
 ###### NFS挂载
-网络文件系统.
+网络文件系统, 实现远程容器卷挂载. 不适合频繁读写.
+windows上实现复杂, 我们选择截图使用.
+```sh
+# 如果在centos和rhel系统上, 则需要安装nfs网络文件系统
+>sudo yum install -y nfs-utils
+>sudo systemctl enable --now rpcbind
+>sudo systemctl enable --now nfs-server
+>sudo firewall-cmd --permanent --add-service=nfs
+>sudo firewall-cmd --permanent --add-service=rpc-bind
+>sudo firewall-cmd --reload
+```
+
+拥有nfs功能的存储服务器
+```
+- NFS Server IP：`192.168.1.100`
+- NFS 共享目录：`/data/nfs`
+```
+
+```sh
+sudo apt install nfs-kernel-server
+sudo mkdir -p /data/nfs
+sudo chmod 777 /data/nfs
+# 设置共享目录 *: 可以配置网段 读写等等权限
+echo "/data/nfs *(rw,sync,no_subtree_check,no_root_squash)" | sudo tee -a /etc/exports
+# echo "/data/nfs 192.168.113.0/24(rw,sync,no_subtree_check,no_root_squash)" | sudo tee -a /etc/exports
+
+# 重新刷新怕nfs配置
+sudo exportfs -arv
+
+# exportfs -f
+# systemctl reload nfs-server
+```
+
+可以使用nfs工具直接挂载到这个远程文件夹, 所有操作都是相互映射
+```sh
+>sudo mkdir -p /mnt/nfs
+>sudo mount -t nfs 192.168.1.100:/nfs/data /mnt/nfs
+```
+pvc
+```yaml
+apiVersion: v1
+
+kind: PersistentVolumeClaim
+
+metadata:
+
+  name: nfs-pvc
+
+spec:
+
+  accessModes:
+
+    - ReadWriteMany
+
+  resources:
+
+    requests:
+
+      storage: 500Mi
+```
+pv
+```yml
+apiVersion: v1
+
+kind: PersistentVolume
+
+metadata:
+
+  name: nfs-pv
+
+spec:
+
+  capacity:
+
+    storage: 1Gi
+
+  accessModes:
+
+    - ReadWriteMany
+
+  persistentVolumeReclaimPolicy: Retain
+
+  nfs:
+
+    path: /data/nfs
+
+    server: 192.168.1.100
+```
 
 ##### PV与PVC
+![](assets/Pasted%20image%2020250423232404.png)
+```
+[ Pod ]
+   |
+   | 使用
+   v
+[ PVC ]  ←→（绑定）
+   ^
+   | 提供
+[ PV ]
+```
+https://kubernetes.io/zh-cn/docs/concepts/storage/volumes/
 
+PV: 持久卷, 独立于pod之外的生命周期, 抽象层. 统一CSI规范. 实现各种存储.
+
+PVC: 持久卷申领, 可以混合存储空间
+![](assets/Pasted%20image%2020250423233559.png)
+
+| 类别    | 子项        | 子项说明                    | 中文注释说明                        |
+| ----- | --------- | ----------------------- | ----------------------------- |
+| 构建方式  | 静态构建      | 用户手动创建 PV               | 需提前编写 YAML 文件创建 PV            |
+|       | 动态构建      | 通过 StorageClass 自动创建 PV | 创建 PVC 时自动匹配和创建 PV            |
+| 生命周期  | 绑定        | PVC 与 PV 成功绑定           | PVC 请求的资源与 PV 匹配后进行绑定         |
+|       | 使用        | Pod 使用 PVC              | Pod 通过 PVC 挂载持久化存储            |
+|       | 回收策略      | Retain（保留）              | 删除 PVC 后保留 PV 及数据，不自动清理       |
+|       |           | Delete（删除）              | 删除 PVC 后，PV 和数据一起被删除          |
+|       |           | Recycle（回收）             | 删除 PVC 后，PV 清空数据后变为可再次使用（已弃用） |
+| PV 状态 | Available | 空闲，未被 PVC 绑定            | 表示 PV 当前尚未被任何 PVC 使用          |
+|       | Bound     | 已被 PVC 绑定               | PV 正被某个 PVC 使用中               |
+|       | Released  | PVC 删除但 PV 资源未重用        | PV 尚未被回收或重用，需要手动处理或重新绑定       |
+|       | Failed    | 自动回收失败                  | 通常由于配置错误或权限问题导致失败             |
+- 举例pv
+```yaml
+apiVersion: v1                          # Kubernetes API 版本，v1 是核心组的版本
+kind: PersistentVolume                  # 资源类型为 PersistentVolume，简称 PV，表示一个集群级别的持久化存储
+metadata:
+  name: pv0001                          # PV 的名称，需全局唯一
+spec:
+  capacity:                             # 指定存储容量
+    storage: 5Gi                        # 存储容量为 5GiB
+  volumeMode: Filesystem                # 存储模式为文件系统（默认值），还可为 Block（块设备）
+  accessModes:                          # 访问模式，决定哪些 Pod 可以以何种方式访问该存储
+    - ReadWriteOnce                     # 单节点读写，一个节点可以挂载该存储并读写
+    # 其他可选：
+    # - ReadOnlyMany                   # 多个节点只读
+    # - ReadWriteMany                  # 多个节点可同时读写
+  persistentVolumeReclaimPolicy: Recycle  # 回收策略，Recycle 表示 PVC 删除后该 PV 的内容会被清空（已弃用）
+  storageClassName: slow               # 存储类名称，需要与 PVC 的 storageClassName 匹配才能绑定
+  mountOptions:                        # 挂载时的额外参数，仅用于支持的存储插件（如 NFS）
+    - hard                              # NFS 挂载方式为硬挂载，连接断开时会持续重试，避免数据不一致
+    - nfsvers=4.1                       # 使用 NFS 协议版本 4.1
+  nfs:                                 # NFS 类型卷定义
+    path: /data/nfs/rw/test-pv          # NFS 服务端共享的目录路径
+    server: 192.168.113.121             # NFS 服务端的 IP 地址（或 DNS 域名）
+```
+查看pv
+```sh
+> kubectl get pv
+No resources found
+```
+![](assets/Pasted%20image%2020250423235828.png)
+- 举例pvc
+```yml
+apiVersion: v1                         # Kubernetes 核心 API 版本
+kind: PersistentVolumeClaim            # 声明一个持久卷资源（PVC），用于申请存储
+metadata:
+  name: pvc-nfs-demo                   # PVC 的名称，需在命名空间内唯一
+spec:
+  accessModes:                         # 声明需要的访问模式，需与目标 PV 的 accessModes 匹配
+    - ReadWriteOnce                    # 单节点可读写（需与 PV 匹配，或者是 ReadWriteMany）
+  resources:
+    requests:
+      storage: 5Gi                     # 请求的存储大小，这个值必须小于或等于匹配 PV 的大小
+  storageClassName: slow              # 指定使用的存储类名称，需与 PV 的 storageClassName 一致
+  volumeName: pv0001                  # 指定要绑定的 PV 名称（静态绑定），可选，设置后 PVC 只绑定该 PV
+```
+- NFS动态存储完整实例
+```yml
+# StorageClass 定义
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-storage
+provisioner: example.com/nfs
+parameters:
+  server: 192.168.1.100
+  path: /data/nfs
+
+---
+
+# PVC 定义
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: nfs-storage
+
+---
+
+# Pod 使用 PVC
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-pod
+spec:
+  containers:
+    - name: app
+      image: nginx
+      volumeMounts:
+        - name: nfs-volume
+          mountPath: /usr/share/nginx/html
+  volumes:
+    - name: nfs-volume
+      persistentVolumeClaim:
+        claimName: nfs-pvc
+
+```
+![](assets/Pasted%20image%2020250424002755.png)
+```sh
+>kubectl get pvc
+```
 
 ##### 存储类
+![](assets/Pasted%20image%2020250424002358.png)
+
 
 ###### StorageClass
+更细的颗粒度可以使用storageclass, pv就是sc的抽象层
+```yml
+# StorageClass 定义
 
+apiVersion: storage.k8s.io/v1
+
+kind: StorageClass
+
+metadata:
+
+  name: nfs-storage
+
+provisioner: example.com/nfs
+
+parameters:
+
+  server: 192.168.1.100
+
+  path: /data/nfs
+```
 
 ###### NFS-PV
+![](assets/Pasted%20image%2020250424002539.png)
+###### RBAC配置
+
+**RBAC（Role-Based Access Control）** 是 Kubernetes 的权限控制系统，动态创建 PV 时需要给 provisioner 相关权限。
+
+**常见需求：**
+- Provisioner 需要访问 PVC、PV 等资源
+- 需要为其配置 **ServiceAccount、Role、RoleBinding**
+
+```sh
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nfs-client-provisioner
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nfs-provisioner-role
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumes", "persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: nfs-provisioner-binding
+subjects:
+- kind: ServiceAccount
+  name: nfs-client-provisioner
+roleRef:
+  kind: Role
+  name: nfs-provisioner-role
+  apiGroup: rbac.authorization.k8s.io
+```
+###### selflnk细节
+![](assets/Pasted%20image%2020250424003038.png)
 
 
 #### 高级调度
 
 ##### Cronjob定时任务
+
+
+
 
 
 ##### Init初始化容器

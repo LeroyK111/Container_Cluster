@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-pod
+spec:
+  containers:
+    - name: app
+      image: nginx
+      volumeMounts:
+        - name: nfs-storage
+          # 挂载到这个目录
+          mountPath: /usr/share/nginx/html
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "100Mi"
+        limits:
+          cpu: "500m"
+          memory: "500Mi"
+  volumes:
+    - name: nfs-storage
+      persistentVolumeClaim:
+        claimName: nfs-pvc
+  # volumes: 属于静态配置方法, 不推荐了
+  # - name: test-volume
+  #   nfs:
+  #     server: my-nfs-server.example.com # 网络地址
+  #     path: /my-nfs-volume # 网络存储路径
+  #     readOnly: false # 不只读
