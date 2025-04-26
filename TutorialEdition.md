@@ -9784,19 +9784,432 @@ Events:
 
 构建复杂的容器镜像.
 ##### 污点和容忍
+主节点master是重要节点.
+污点是添加到节点上的属性，用于表示该节点不接受某些 Pod 的调度。​只有那些具有相应容忍的 Pod 才能被调度到这些节点上。​
+
+容忍是添加到 Pod 上的属性，用于声明该 Pod 可以被调度到具有特定污点的节点上。​
+
+```sh
+> kubectl taint no docker-desktop --help               
+Update the taints on one or more nodes.
+
+  *  A taint consists of a key, value, and effect. As an argument here, it is expressed as
+key=value:effect.
+  *  The key must begin with a letter or number, and may contain letters, numbers, hyphens, dots,
+and underscores, up to 253 characters.
+  *  Optionally, the key can begin with a DNS subdomain prefix and a single '/', like
+example.com/my-app.
+  *  The value is optional. If given, it must begin with a letter or number, and may contain
+letters, numbers, hyphens, dots, and underscores, up to 63 characters.
+  *  The effect must be NoSchedule, PreferNoSchedule or NoExecute.
+  *  Currently taint can only apply to node.
+
+Examples:
+  # Update node 'foo' with a taint with key 'dedicated' and value 'special-user' and effect
+'NoSchedule'
+  # If a taint with that key and effect already exists, its value is replaced as specified
+  kubectl taint nodes foo dedicated=special-user:NoSchedule
+
+  # Remove from node 'foo' the taint with key 'dedicated' and effect 'NoSchedule' if one exists
+  kubectl taint nodes foo dedicated:NoSchedule-
+
+  # Remove from node 'foo' all the taints with key 'dedicated'
+  kubectl taint nodes foo dedicated-
+
+  # Add a taint with key 'dedicated' on nodes having label myLabel=X
+  kubectl taint node -l myLabel=X  dedicated=foo:PreferNoSchedule
+
+  # Add to node 'foo' a taint with key 'bar' and no value
+  kubectl taint nodes foo bar:NoSchedule
+
+Options:
+    --all=false:
+        Select all nodes in the cluster
+
+    --allow-missing-template-keys=true:
+        If true, ignore any errors in templates when a field or map key is missing in the
+        template. Only applies to golang and jsonpath output formats.
+
+    --dry-run='none':
+        Must be "none", "server", or "client". If client strategy, only print the object that
+        would be sent, without sending it. If server strategy, submit server-side request without
+        persisting the resource.
+
+    --field-manager='kubectl-taint':
+        Name of the manager used to track field ownership.
+
+    -o, --output='':
+        Output format. One of: (json, yaml, name, go-template, go-template-file, template,
+        templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+
+    --overwrite=false:
+        If true, allow taints to be overwritten, otherwise reject taint updates that overwrite
+        existing taints.
+
+    -l, --selector='':
+        Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l
+        key1=value1,key2=value2). Matching objects must satisfy all of the specified label
+        constraints.
+
+    --show-managed-fields=false:
+        If true, keep the managedFields when printing objects in JSON or YAML format.
+
+    --template='':
+        Template string or path to template file to use when -o=go-template, -o=go-template-file.
+        The template format is golang templates
+        [http://golang.org/pkg/text/template/#pkg-overview].
+
+    --validate='strict':
+        Must be one of: strict (or true), warn, ignore (or false).              "true" or "strict" will use a        
+        schema to validate the input and fail the request if invalid. It will perform server side
+        validation if ServerSideFieldValidation is enabled on the api-server, but will fall back
+        to less reliable client-side validation if not.                 "warn" will warn about unknown or
+        duplicate fields without blocking the request if server-side field validation is enabled
+        on the API server, and behave as "ignore" otherwise.            "false" or "ignore" will not
+        perform any schema validation, silently dropping any unknown or duplicate fields.
+
+Usage:
+  kubectl taint NODE NAME KEY_1=VAL_1:TAINT_EFFECT_1 ... KEY_N=VAL_N:TAINT_EFFECT_N [options]
+
+Use "kubectl options" for a list of global command-line options (applies to all commands).
+```
+###### 污点的类型taint
+- `NoSchedule`：​不允许新的 Pod 被调度到该节点上，除非 Pod 具有相应的容忍。
+    
+- `PreferNoSchedule`：​尽量避免将新的 Pod 调度到该节点上，但不是强制性的。
+    
+- `NoExecute`：​不仅阻止新的 Pod 被调度到该节点上，还会驱逐已经存在但不容忍该污点的 Pod。​
+
+```sh
+> kubectl get no
+NAME             STATUS   ROLES           AGE   VERSION
+docker-desktop   Ready    control-plane   44d   v1.32.2
+
+> kubectl taint no docker-desktop memory=low:NoSchedule  
+node/docker-desktop tainted
+
+# 列出所有节点的污点
+# kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints
+
+# 查看对应节点的污点
+> kubectl describe no docker-desktop   
+Name:               docker-desktop
+Roles:              control-plane
+Labels:             app=windows
+                    beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/os=linux
+                    ingress=true
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=docker-desktop
+                    kubernetes.io/os=linux
+                    node-role.kubernetes.io/control-plane=
+                    node.kubernetes.io/exclude-from-external-load-balancers=
+                    type=microservices
+Annotations:        kubeadm.alpha.kubernetes.io/cri-socket: unix:///var/run/cri-dockerd.sock
+                    node.alpha.kubernetes.io/ttl: 0
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Thu, 13 Mar 2025 06:58:52 +0800
+# 这就是污点
+Taints:             memory=low:NoSchedule
+Unschedulable:      false
+Lease:
+  HolderIdentity:  docker-desktop
+  AcquireTime:     <unset>
+  RenewTime:       Sat, 26 Apr 2025 20:35:58 +0800
+Conditions:
+  Type             Status  LastHeartbeatTime                 LastTransitionTime                Reason                
+       Message
+  ----             ------  -----------------                 ------------------                ------                
+       -------
+  MemoryPressure   False   Sat, 26 Apr 2025 20:36:03 +0800   Thu, 13 Mar 2025 06:58:51 +0800   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure     False   Sat, 26 Apr 2025 20:36:03 +0800   Thu, 13 Mar 2025 06:58:51 +0800   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure      False   Sat, 26 Apr 2025 20:36:03 +0800   Thu, 13 Mar 2025 06:58:51 +0800   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready            True    Sat, 26 Apr 2025 20:36:03 +0800   Thu, 13 Mar 2025 06:58:52 +0800   KubeletReady          
+       kubelet is posting ready status
+Addresses:
+  InternalIP:  192.168.65.3
+  Hostname:    docker-desktop
+Capacity:
+  cpu:                24
+  ephemeral-storage:  1055762868Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             32402960Ki
+  pods:               110
+Allocatable:
+  cpu:                24
+  ephemeral-storage:  972991057538
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             32300560Ki
+  pods:               110
+System Info:
+  Machine ID:                 c9b33959-06c7-48b7-933c-32ff8aac913a
+  System UUID:                c9b33959-06c7-48b7-933c-32ff8aac913a
+  Boot ID:                    9ab1b8df-60a2-442b-8aaa-dc8888099fbe
+  Kernel Version:             5.15.153.1-microsoft-standard-WSL2
+  OS Image:                   Docker Desktop
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  docker://28.0.4
+  Kubelet Version:            v1.32.2
+  Kube-Proxy Version:         v1.32.2
+Non-terminated Pods:          (18 in total)
+  Namespace                   Name                                      CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                                      ------------  ----------  ---------------  -------------  ---
+  default                     demo-app                                  100m (0%)     200m (0%)   128Mi (0%)       256Mi (0%)     4d23h
+  default                     dns-test                                  0 (0%)        0 (0%)      0 (0%)           0 (0%)         13d
+  default                     empty-pod                                 200m (0%)     1 (4%)      200Mi (0%)       256Mi (0%)     3d21h
+  default                     init-demo                                 100m (0%)     200m (0%)   100Mi (0%)       200Mi (0%)     57m
+  default                     nginx-deploy-65f5b4d495-jf5lc             100m (0%)     200m (0%)   128Mi (0%)       128Mi (0%)     8d
+  default                     nginx-deploy-65f5b4d495-xlb6r             100m (0%)     200m (0%)   128Mi (0%)       128Mi (0%)     8d
+  default                     test-volume-pd                            100m (0%)     200m (0%)   64Mi (0%)        128Mi (0%)     4d21h
+  ingress-nginx               ingress-nginx-controller-cczgs            100m (0%)     0 (0%)      90Mi (0%)        0 (0%)         12d
+  kube-system                 coredns-668d6bf9bc-flv9g                  100m (0%)     0 (0%)      70Mi (0%)        170Mi (0%)     44d
+  kube-system                 coredns-668d6bf9bc-rkn8t                  100m (0%)     0 (0%)      70Mi (0%)        170Mi (0%)     44d
+  kube-system                 etcd-docker-desktop                       100m (0%)     0 (0%)      100Mi (0%)       0 (0%)         44d
+  kube-system                 kube-apiserver-docker-desktop             250m (1%)     0 (0%)      0 (0%)           0 (0%)         44d
+  kube-system                 kube-controller-manager-docker-desktop    200m (0%)     0 (0%)      0 (0%)           0 (0%)         44d
+  kube-system                 kube-proxy-k6878                          0 (0%)        0 (0%)      0 (0%)           0 (0%)         44d
+  kube-system                 kube-scheduler-docker-desktop             100m (0%)     0 (0%)      0 (0%)           0 (0%)         44d
+  kube-system                 metrics-server-7d8d8cb5d9-rqfzn           100m (0%)     0 (0%)      200Mi (0%)       0 (0%)         17d
+  kube-system                 storage-provisioner                       0 (0%)        0 (0%)      0 (0%)           0 (0%)         44d
+  kube-system                 vpnkit-controller                         0 (0%)        0 (0%)      0 (0%)           0 (0%)         44d
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests     Limits
+  --------           --------     ------
+  cpu                1750m (7%)   2 (8%)
+  memory             1278Mi (4%)  1436Mi (4%)
+  ephemeral-storage  0 (0%)       0 (0%)
+  hugepages-1Gi      0 (0%)       0 (0%)
+  hugepages-2Mi      0 (0%)       0 (0%)
+Events:              <none>
+```
+
+```sh
+# 删除污点
+> kubectl taint no docker-desktop memory=low:NoSchedule-
+node/docker-desktop untainted
+```
+
+```sh
+# 查看pod在哪个node 上运行
+> kubectl get po -o wide
+NAME                            READY   STATUS      RESTARTS       AGE     IP           NODE             NOMINATED NODE   READINESS GATES
+demo-app                        1/1     Running     9 (13h ago)    4d23h   10.1.6.122   docker-desktop   <none>           <none>
+dns-test                        1/1     Running     22 (13h ago)   13d     10.1.6.117   docker-desktop   <none>           <none>
+empty-pod                       2/2     Running     79 (38m ago)   3d21h   10.1.6.123   docker-desktop   <none>           <none>
+init-demo                       1/1     Running     0              61m     10.1.6.169   docker-desktop   <none>           <none>
+nginx-deploy-65f5b4d495-jf5lc   1/1     Running     15 (13h ago)   8d      10.1.6.121   docker-desktop   <none>           <none>
+nginx-deploy-65f5b4d495-xlb6r   1/1     Running     15 (13h ago)   8d      10.1.6.120   docker-desktop   <none>           <none>
+test-file                       0/1     Completed   0              9d      <none>       docker-desktop   <none>           <none>
+test-volume-pd                  1/1     Running     9 (13h ago)    4d21h   10.1.6.119   docker-desktop   <none>           <none>
+```
+###### 容忍的类型 toleration
+
+`Equal` 操作符
+- **含义**：​表示容忍规则必须与节点上的污点（Taint）的 `key` 和 `value` 完全匹配，且 `effect` 也需一致。
+- **使用场景**：​当你希望 Pod 只容忍特定的污点时使用。​
 
 
+`Exists` 操作符
+- **含义**：​表示只要节点上的污点具有相同的 `key`，且 `effect` 匹配，Pod 就可以容忍该污点。此时 `value` 字段会被忽略。
+- **使用场景**：​当你希望 Pod 容忍某个 `key` 的所有污点值时使用。
 
-##### 亲和力
+```sh
+> kubectl get no
+NAME             STATUS   ROLES           AGE   VERSION
+docker-desktop   Ready    control-plane   44d   v1.32.2
+
+>kubectl taint nodes node1 dedicated=database:NoSchedule
+```
+
+```yml
+apiVersion: v1
+
+kind: Pod
+
+metadata:
+
+  name: db-pod
+
+spec:
+
+  containers:
+
+    - name: db
+
+      image: mysql
+
+      resources:
+
+        requests:
+
+          cpu: "100m"
+
+          memory: "100Mi"
+
+        limits:
+
+          cpu: "200m"
+
+          memory: "200Mi"
+
+  tolerations:
+
+    - key: "dedicated"
+
+      operator: "Equal" # 必须完全匹配
+
+      value: "database"
+
+      effect: "NoSchedule"
+     
+    
+```
+
+```yml
+tolerations:
+- key: "dedicated"
+  operator: "Exists"
+  effect: "NoSchedule"
+  # 在这个示例中，当节点被标记为 `unreachable` 并添加了相应的污点时，`example-pod` 会在节点上继续运行 600 秒（10 分钟）。如果在这段时间内节点恢复正常并移除污点，Pod 将不会被驱逐。​
+  tolerationSeconds: 600
+```
+
+| 操作符      | 是否需要指定 `value` | 匹配条件                           | 使用场景              |
+| -------- | -------------- | ------------------------------ | ----------------- |
+| `Equal`  | 是              | `key`、`value` 和 `effect` 全部匹配  | 精确匹配特定污点          |
+| `Exists` | 否              | `key` 和 `effect` 匹配，忽略 `value` | 容忍某个 `key` 的所有污点值 |
+##### 亲和力与反亲和力
+类似node/pod selector 进行更大范围的匹配 node 与 pod.
+
+- 亲和力 nodeAffinity /反亲和力 nodeAffinity 是第一限制.
+
+- 必须满足 requiredDuringSchedulingIgnoredDuringExecution / 优先满足 preferredDuringSchedulingIgnoredDuringExecution  关键字段是第二限制
+
+| 类型                          | 级别   | 字段位置                                                           | 作用方向       | 规则强度  | 关键字段                                                                                                | 示例用途                                             |
+| --------------------------- | ---- | -------------------------------------------------------------- | ---------- | ----- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 节点亲和性（Node Affinity）        | 节点级  | `.spec.affinity.nodeAffinity`                                  | Pod → Node | 必须/偏好 | `requiredDuringSchedulingIgnoredDuringExecution`/ `preferredDuringSchedulingIgnoredDuringExecution` | 将 Pod 调度到具有特定标签的节点上，例如 `disktype=ssd`            |
+| Pod 亲和性（Pod Affinity）       | Pod级 | `.spec.affinity.podAffinity`                                   | Pod ↔ Pod  | 必须/偏好 | `requiredDuringSchedulingIgnoredDuringExecution`/ `preferredDuringSchedulingIgnoredDuringExecution` | 将 Pod 调度到与特定标签的其他 Pod 同一拓扑域中，例如 `app=frontend`   |
+| Pod 反亲和性（Pod Anti-Affinity） | Pod级 | `.spec.affinity.podAntiAffinity`                               | Pod ↔ Pod  | 必须/偏好 | `requiredDuringSchedulingIgnoredDuringExecution`/ `preferredDuringSchedulingIgnoredDuringExecution` | 避免将 Pod 调度到与特定标签的其他 Pod 同一拓扑域中，例如 `app=frontend` |
+| 节点反亲和性（Node Anti-Affinity）  | 节点级  | `.spec.affinity.nodeAffinity`（使用 `NotIn` 或 `DoesNotExist` 操作符） | Pod → Node | 必须/偏好 | `requiredDuringSchedulingIgnoredDuringExecution`/ `preferredDuringSchedulingIgnoredDuringExecution` | 避免将 Pod 调度到具有特定标签的节点上，例如 `disktype=hdd`          |
+
+节点亲和性概念上类似于 `nodeSelector`， 它使你可以根据节点上的标签来约束 Pod 可以调度到哪些节点上。 节点亲和性有两种：
+
+- `requiredDuringSchedulingIgnoredDuringExecution`： 调度器只有在规则被满足的时候才能执行调度。此功能类似于 `nodeSelector`， 但其语法表达能力更强。(必须满足)
+- `preferredDuringSchedulingIgnoredDuringExecution`： 调度器会尝试寻找满足对应规则的节点。如果找不到匹配的节点，调度器仍然会调度该 Pod。
+
+![](assets/Pasted%20image%2020250426212822.png)
+
+Pod 的亲和性与反亲和性也有两种类型：
+
+- `requiredDuringSchedulingIgnoredDuringExecution`
+- `preferredDuringSchedulingIgnoredDuringExecution`
+
+例如，你可以使用 `requiredDuringSchedulingIgnoredDuringExecution` 亲和性来告诉调度器， 将两个服务的 Pod 放到同一个云提供商可用区内，因为它们彼此之间通信非常频繁。
+
+类似地，你可以使用 `preferredDuringSchedulingIgnoredDuringExecution` 反亲和性来将同一服务的多个 Pod 分布到多个云提供商可用区中。
+
+要使用 Pod 间亲和性，可以使用 Pod 规约中的 `.affinity.podAffinity` 字段。 对于 Pod 间反亲和性，可以使用 Pod 规约中的 `.affinity.podAntiAffinity` 字段。
+
+```md
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-node-affinity
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+  affinity:
+    nodeAffinity:
+      # 必须满足的调度规则（硬性要求）
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd
+      # 优先满足的调度规则（软性要求）
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        preference:
+          matchExpressions:
+          - key: zone
+            operator: In
+            values:
+            - zone-a
 
 
+- `requiredDuringSchedulingIgnoredDuringExecution`：表示 Pod 只能被调度到带有 `disktype=ssd` 标签的节点上。​
+    
+- `preferredDuringSchedulingIgnoredDuringExecution`：表示调度器会优先将 Pod 调度到带有 `zone=zone-a` 标签的节点上，但如果没有符合条件的节点，仍会调度到其他满足硬性要求的节点上。​
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod-affinity
+  labels:
+    app: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - nginx
+        topologyKey: "kubernetes.io/hostname"
 
 
+- `podAffinity`：表示 Pod 希望被调度到与带有 `app=nginx` 标签的其他 Pod 相同的节点上。​
+    
+- `topologyKey`：指定了亲和性的拓扑域，此处为节点的主机名，意味着亲和性作用于节点级别。
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod-anti-affinity
+  labels:
+    app: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - nginx
+        topologyKey: "kubernetes.io/hostname"
 
 
+- `podAntiAffinity`：表示 Pod 不希望被调度到与带有 `app=nginx` 标签的其他 Pod 相同的节点上。
+    
+- 此配置常用于实现服务的高可用性，确保同一服务的多个副本分布在不同的节点上，避免单点故障。​
+```
 #### 访问控制
-
+![](assets/Pasted%20image%2020250426215550.png)
 ##### 认证和鉴权
+
+
+
+
+
 
 #### HELM包管理
 
@@ -9813,8 +10226,6 @@ Events:
 
 
 
-
-
 #### 微服务案例
 
 
@@ -9825,19 +10236,27 @@ Events:
 
 
 
+#### 其他用法
+(待补充)
+
+##### k8s限制
 
 
+##### 集群升级
 
 
+##### API管理
 
 
+##### 云厂商集群
+
+###### 技巧及经验
+
+###### 云控制器
 
 
-
-
-
-
-
+##### 特殊用法
+太多了, 后面再说.
 
 
 
