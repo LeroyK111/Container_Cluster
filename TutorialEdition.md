@@ -10237,7 +10237,37 @@ spec:
 
 
 #### 其他用法
-(待补充)
+
+
+##### 插件
+| 分类          | 插件/工具                    | 说明                           |
+| ----------- | ------------------------ | ---------------------------- |
+| 网络插件（CNI）   | Calico                   | 高性能网络，支持网络策略                 |
+|             | Flannel                  | 简单易用的覆盖网络                    |
+|             | Weave Net                | 自动网络配置，支持加密                  |
+|             | Cilium                   | 基于eBPF，支持网络安全策略与服务网格         |
+|             | Amazon VPC CNI           | AWS EKS专用，Pod直接使用VPC网络       |
+| Ingress 控制器 | NGINX Ingress Controller | 最常用的Ingress控制器，功能丰富          |
+|             | Kong Ingress Controller  | 集成API网关功能                    |
+|             | Traefik                  | 动态环境友好，自动发现                  |
+|             | HAProxy Ingress          | 高性能、适合大规模集群                  |
+| 监控与可观测性     | Prometheus               | 核心监控系统                       |
+|             | Grafana                  | 数据可视化仪表盘                     |
+|             | Kube-state-metrics       | 输出Kubernetes资源状态指标           |
+|             | Metrics Server           | Pod资源使用数据，支持HPA              |
+| 安全与访问控制     | RBAC                     | 基于角色的访问控制标准功能                |
+|             | PodSecurityPolicy (已弃用)  | Pod安全限制（建议用OPA/Gatekeeper代替） |
+|             | OPA / Gatekeeper         | 策略引擎与合规性管理                   |
+|             | Kube-bench               | 检查集群安全基准                     |
+|             | Kube-hunter              | 扫描集群安全漏洞                     |
+| 存储插件（CSI）   | Rook                     | 分布式存储，如 Ceph                 |
+|             | OpenEBS                  | 容器本地存储方案                     |
+|             | Longhorn                 | 轻量级分布式块存储                    |
+|             | Amazon EBS CSI Driver    | AWS上的块存储挂载                   |
+| 自动化与CI/CD   | Argo CD                  | GitOps持续交付工具                 |
+|             | Flux                     | GitOps方式，轻量级持续交付             |
+|             | Jenkins X                | 为Kubernetes设计的CI/CD平台        |
+|             | Tekton                   | Kubernetes原生的CI/CD流水线框架      |
 
 ##### k8s限制
 
