@@ -10470,6 +10470,17 @@ vpnkit-controller                                               ClusterRole/vpnk
 
 常见用法表格
 
+|账户类别|角色类别|绑定方式|常用命令|
+|---|---|---|---|
+|用户 (User)|Role (角色)|RoleBinding（命名空间级）|查询：`kubectl get rolebinding -n <命名空间>`；创建：`kubectl create rolebinding <绑定名> --role=<角色名> --user=<用户名> -n <命名空间>`|
+|用户 (User)|ClusterRole (集群角色)|RoleBinding（命名空间级）|查询：`kubectl get rolebinding -n <命名空间>`；创建：`kubectl create rolebinding <绑定名> --clusterrole=<集群角色名> --user=<用户名> -n <命名空间>`|
+|用户 (User)|ClusterRole (集群角色)|ClusterRoleBinding（集群级）|查询：`kubectl get clusterrolebinding`；创建：`kubectl create clusterrolebinding <绑定名> --clusterrole=<集群角色名> --user=<用户名>`|
+|用户组 (Group)|Role (角色)|RoleBinding（命名空间级）|查询：`kubectl get rolebinding -n <命名空间>`；创建：`kubectl create rolebinding <绑定名> --role=<角色名> --group=<组名> -n <命名空间>`|
+|用户组 (Group)|ClusterRole (集群角色)|RoleBinding（命名空间级）|查询：`kubectl get rolebinding -n <命名空间>`；创建：`kubectl create rolebinding <绑定名> --clusterrole=<集群角色名> --group=<组名> -n <命名空间>`|
+|用户组 (Group)|ClusterRole (集群角色)|ClusterRoleBinding（集群级）|查询：`kubectl get clusterrolebinding`；创建：`kubectl create clusterrolebinding <绑定名> --clusterrole=<集群角色名> --group=<组名>`|
+|服务账号 (ServiceAccount)|Role (角色)|RoleBinding（命名空间级）|查询：`kubectl get rolebinding -n <命名空间>`；创建：`kubectl create rolebinding <绑定名> --role=<角色名> --serviceaccount=<命名空间>:<账号名> -n <命名空间>`|
+|服务账号 (ServiceAccount)|ClusterRole (集群角色)|RoleBinding（命名空间级）|查询：`kubectl get rolebinding -n <命名空间>`；创建：`kubectl create rolebinding <绑定名> --clusterrole=<集群角色名> --serviceaccount=<命名空间>:<账号名> -n <命名空间>`|
+|服务账号 (ServiceAccount)|ClusterRole (集群角色)|ClusterRoleBinding（集群级）|查询：`kubectl get clusterrolebinding`；创建：`kubectl create clusterrolebinding <绑定名> --clusterrole=<集群角色名> --serviceaccount=<命名空间>:<账号名>`|
 
 
 #### HELM 包管理器
