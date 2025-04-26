@@ -10205,13 +10205,277 @@ spec:
 #### 访问控制
 ![](assets/Pasted%20image%2020250426215550.png)
 ##### 认证和鉴权
+服务账户(开发者使用 service account) + 普通账户(属于二次开发使用 user account).
+简单用法:
+```sh
+> kubectl get sa
+NAME      SECRETS   AGE
+default   0         44d
+
+> kubectl get serviceaccount
+NAME      SECRETS   AGE
+default   0         44d
+
+# 命名空间 对应不同的用户
+> kubectl get sa -n kube-system
+NAME                                          SECRETS   AGE
+attachdetach-controller                       0         44d
+bootstrap-signer                              0         44d
+certificate-controller                        0         44d
+clusterrole-aggregation-controller            0         44d
+coredns                                       0         44d
+cronjob-controller                            0         44d
+daemon-set-controller                         0         44d
+default                                       0         44d
+deployment-controller                         0         44d
+disruption-controller                         0         44d
+endpoint-controller                           0         44d
+endpointslice-controller                      0         44d
+endpointslicemirroring-controller             0         44d
+ephemeral-volume-controller                   0         44d
+expand-controller                             0         44d
+generic-garbage-collector                     0         44d
+horizontal-pod-autoscaler                     0         44d
+job-controller                                0         44d
+kube-proxy                                    0         44d
+legacy-service-account-token-cleaner          0         44d
+metrics-server                                0         17d
+namespace-controller                          0         44d
+node-controller                               0         44d
+persistent-volume-binder                      0         44d
+pod-garbage-collector                         0         44d
+pv-protection-controller                      0         44d
+pvc-protection-controller                     0         44d
+replicaset-controller                         0         44d
+replication-controller                        0         44d
+resourcequota-controller                      0         44d
+root-ca-cert-publisher                        0         44d
+service-account-controller                    0         44d
+statefulset-controller                        0         44d
+storage-provisioner                           0         44d
+token-cleaner                                 0         44d
+ttl-after-finished-controller                 0         44d
+ttl-controller                                0         44d
+validatingadmissionpolicy-status-controller   0         44d
+vpnkit-controller                             0         44d
+```
+###### RBAC 基于角色的访问控制
+
+```sh
+# 获取所有命名空间
+> kubectl get ns             
+NAME              STATUS   AGE
+default           Active   44d
+ingress-nginx     Active   13d
+kube-node-lease   Active   44d
+kube-public       Active   44d
+kube-system       Active   44d
+# 查找这个命名空间内的所有角色
+> kubectl get role -n ingress-nginx
+NAME            CREATED AT
+ingress-nginx   2025-04-13T15:40:12Z
+
+# 查看角色能做的curd能力
+>kubectl get role -n ingress-nginx -o yaml
+```
+
+```sh
+# 集群级别角色
+> kubectl get clusterrole                 
+NAME                                                                   CREATED AT
+admin                                                                  2025-03-12T22:58:53Z
+cluster-admin                                                          2025-03-12T22:58:53Z
+edit                                                                   2025-03-12T22:58:53Z
+ingress-nginx                                                          2025-04-13T15:40:12Z
+kubeadm:get-nodes                                                      2025-03-12T22:58:53Z
+storage-provisioner                                                    2025-03-12T22:59:01Z
+system:aggregate-to-admin                                              2025-03-12T22:58:53Z
+system:aggregate-to-edit                                               2025-03-12T22:58:53Z
+system:aggregate-to-view                                               2025-03-12T22:58:53Z
+system:aggregated-metrics-reader                                       2025-04-08T17:25:38Z
+system:auth-delegator                                                  2025-03-12T22:58:53Z
+system:basic-user                                                      2025-03-12T22:58:53Z
+system:certificates.k8s.io:certificatesigningrequests:nodeclient       2025-03-12T22:58:53Z
+system:certificates.k8s.io:certificatesigningrequests:selfnodeclient   2025-03-12T22:58:53Z
+system:certificates.k8s.io:kube-apiserver-client-approver              2025-03-12T22:58:53Z
+system:certificates.k8s.io:kube-apiserver-client-kubelet-approver      2025-03-12T22:58:53Z
+system:certificates.k8s.io:kubelet-serving-approver                    2025-03-12T22:58:53Z
+system:certificates.k8s.io:legacy-unknown-approver                     2025-03-12T22:58:53Z
+system:controller:attachdetach-controller                              2025-03-12T22:58:53Z
+system:controller:certificate-controller                               2025-03-12T22:58:53Z
+system:controller:clusterrole-aggregation-controller                   2025-03-12T22:58:53Z
+system:controller:cronjob-controller                                   2025-03-12T22:58:53Z
+system:controller:daemon-set-controller                                2025-03-12T22:58:53Z
+system:controller:deployment-controller                                2025-03-12T22:58:53Z
+system:controller:disruption-controller                                2025-03-12T22:58:53Z
+system:controller:endpoint-controller                                  2025-03-12T22:58:53Z
+system:controller:endpointslice-controller                             2025-03-12T22:58:53Z
+system:controller:endpointslicemirroring-controller                    2025-03-12T22:58:53Z
+system:controller:ephemeral-volume-controller                          2025-03-12T22:58:53Z
+system:controller:expand-controller                                    2025-03-12T22:58:53Z
+system:controller:generic-garbage-collector                            2025-03-12T22:58:53Z
+system:controller:horizontal-pod-autoscaler                            2025-03-12T22:58:53Z
+system:controller:job-controller                                       2025-03-12T22:58:53Z
+system:controller:legacy-service-account-token-cleaner                 2025-03-12T22:58:53Z
+system:controller:namespace-controller                                 2025-03-12T22:58:53Z
+system:controller:node-controller                                      2025-03-12T22:58:53Z
+system:controller:persistent-volume-binder                             2025-03-12T22:58:53Z
+system:controller:pod-garbage-collector                                2025-03-12T22:58:53Z
+system:controller:pv-protection-controller                             2025-03-12T22:58:53Z
+system:controller:pvc-protection-controller                            2025-03-12T22:58:53Z
+system:controller:replicaset-controller                                2025-03-12T22:58:53Z
+system:controller:replication-controller                               2025-03-12T22:58:53Z
+system:controller:resourcequota-controller                             2025-03-12T22:58:53Z
+system:controller:root-ca-cert-publisher                               2025-03-12T22:58:53Z
+system:controller:route-controller                                     2025-03-12T22:58:53Z
+system:controller:service-account-controller                           2025-03-12T22:58:53Z
+system:controller:service-controller                                   2025-03-12T22:58:53Z
+system:controller:statefulset-controller                               2025-03-12T22:58:53Z
+system:controller:ttl-after-finished-controller                        2025-03-12T22:58:53Z
+system:controller:ttl-controller                                       2025-03-12T22:58:53Z
+system:controller:validatingadmissionpolicy-status-controller          2025-03-12T22:58:53Z
+system:coredns                                                         2025-03-12T22:58:54Z
+system:discovery                                                       2025-03-12T22:58:53Z
+system:heapster                                                        2025-03-12T22:58:53Z
+system:kube-aggregator                                                 2025-03-12T22:58:53Z
+system:kube-controller-manager                                         2025-03-12T22:58:53Z
+system:kube-dns                                                        2025-03-12T22:58:53Z
+system:kube-scheduler                                                  2025-03-12T22:58:53Z
+system:kubelet-api-admin                                               2025-03-12T22:58:53Z
+system:metrics-server                                                  2025-04-08T17:25:38Z
+system:monitoring                                                      2025-03-12T22:58:53Z
+system:node                                                            2025-03-12T22:58:53Z
+system:node-bootstrapper                                               2025-03-12T22:58:53Z
+system:node-problem-detector                                           2025-03-12T22:58:53Z
+system:node-proxier                                                    2025-03-12T22:58:53Z
+system:persistent-volume-provisioner                                   2025-03-12T22:58:53Z
+system:public-info-viewer                                              2025-03-12T22:58:53Z
+system:service-account-issuer-discovery                                2025-03-12T22:58:53Z
+system:volume-scheduler                                                2025-03-12T22:58:53Z
+view                                                                   2025-03-12T22:58:53Z
+vpnkit-controller                                                      2025-03-12T22:59:01Z
+
+# 一样的
+>kubectl get clusterrole ingress-nginx -o yaml
+```
+这里我们将角色和账户bingding起来.
+```sh
+# 普通角色和账户组的关系
+> kubectl get rolebinding --all-namespaces
+NAMESPACE       NAME                                                ROLE                                                  AGE
+ingress-nginx   ingress-nginx                                       Role/ingress-nginx                                    12d
+kube-public     kubeadm:bootstrap-signer-clusterinfo                Role/kubeadm:bootstrap-signer-clusterinfo             44d
+kube-public     system:controller:bootstrap-signer                  Role/system:controller:bootstrap-signer               44d
+kube-system     kube-proxy                                          Role/kube-proxy                                       44d
+kube-system     kubeadm:kubelet-config                              Role/kubeadm:kubelet-config                      
+     44d
+kube-system     kubeadm:nodes-kubeadm-config                        Role/kubeadm:nodes-kubeadm-config                
+     44d
+kube-system     metrics-server-auth-reader                          Role/extension-apiserver-authentication-reader        17d
+kube-system     system::extension-apiserver-authentication-reader   Role/extension-apiserver-authentication-reader        44d
+kube-system     system::leader-locking-kube-controller-manager      Role/system::leader-locking-kube-controller-manager   44d
+kube-system     system::leader-locking-kube-scheduler               Role/system::leader-locking-kube-scheduler            44d
+kube-system     system:controller:bootstrap-signer                  Role/system:controller:bootstrap-signer          
+     44d
+kube-system     system:controller:cloud-provider                    Role/system:controller:cloud-provider            
+     44d
+kube-system     system:controller:token-cleaner                     Role/system:controller:token-cleaner             
+     44d
+
+# 集群角色和账户组的关系
+> kubectl get clusterrolebinding
+NAME                                                            ROLE                                                 
+                              AGE
+cluster-admin                                                   ClusterRole/cluster-admin                            
+                              44d
+ingress-nginx                                                   ClusterRole/ingress-nginx                            
+                              12d
+kubeadm:cluster-admins                                          ClusterRole/cluster-admin                            
+                              44d
+kubeadm:get-nodes                                               ClusterRole/kubeadm:get-nodes                        
+                              44d
+kubeadm:kubelet-bootstrap                                       ClusterRole/system:node-bootstrapper                 
+                              44d
+kubeadm:node-autoapprove-bootstrap                              ClusterRole/system:certificates.k8s.io:certificatesigningrequests:nodeclient       44d
+kubeadm:node-autoapprove-certificate-rotation                   ClusterRole/system:certificates.k8s.io:certificatesigningrequests:selfnodeclient   44d
+kubeadm:node-proxier                                            ClusterRole/system:node-proxier                      
+                              44d
+metrics-server:system:auth-delegator                            ClusterRole/system:auth-delegator                    
+                              17d
+storage-provisioner                                             ClusterRole/storage-provisioner                      
+                              44d
+system:basic-user                                               ClusterRole/system:basic-user                        
+                              44d
+system:controller:attachdetach-controller                       ClusterRole/system:controller:attachdetach-controller                              44d
+system:controller:certificate-controller                        ClusterRole/system:controller:certificate-controller                               44d
+system:controller:clusterrole-aggregation-controller            ClusterRole/system:controller:clusterrole-aggregation-controller                   44d
+system:controller:cronjob-controller                            ClusterRole/system:controller:cronjob-controller                                   44d
+system:controller:daemon-set-controller                         ClusterRole/system:controller:daemon-set-controller                                44d
+system:controller:deployment-controller                         ClusterRole/system:controller:deployment-controller                                44d
+system:controller:disruption-controller                         ClusterRole/system:controller:disruption-controller                                44d
+system:controller:endpoint-controller                           ClusterRole/system:controller:endpoint-controller                                  44d
+system:controller:endpointslice-controller                      ClusterRole/system:controller:endpointslice-controller                             44d
+system:controller:endpointslicemirroring-controller             ClusterRole/system:controller:endpointslicemirroring-controller                    44d
+system:controller:ephemeral-volume-controller                   ClusterRole/system:controller:ephemeral-volume-controller                          44d
+system:controller:expand-controller                             ClusterRole/system:controller:expand-controller                                    44d
+system:controller:generic-garbage-collector                     ClusterRole/system:controller:generic-garbage-collector                            44d
+system:controller:horizontal-pod-autoscaler                     ClusterRole/system:controller:horizontal-pod-autoscaler                            44d
+system:controller:job-controller                                ClusterRole/system:controller:job-controller         
+                              44d
+system:controller:legacy-service-account-token-cleaner          ClusterRole/system:controller:legacy-service-account-token-cleaner                 44d
+system:controller:namespace-controller                          ClusterRole/system:controller:namespace-controller                                 44d
+system:controller:node-controller                               ClusterRole/system:controller:node-controller                                      44d
+system:controller:persistent-volume-binder                      ClusterRole/system:controller:persistent-volume-binder                             44d
+system:controller:pod-garbage-collector                         ClusterRole/system:controller:pod-garbage-collector                                44d
+system:controller:pv-protection-controller                      ClusterRole/system:controller:pv-protection-controller                             44d
+system:controller:pvc-protection-controller                     ClusterRole/system:controller:pvc-protection-controller                            44d
+system:controller:replicaset-controller                         ClusterRole/system:controller:replicaset-controller                                44d
+system:controller:replication-controller                        ClusterRole/system:controller:replication-controller                               44d
+system:controller:resourcequota-controller                      ClusterRole/system:controller:resourcequota-controller                             44d
+system:controller:root-ca-cert-publisher                        ClusterRole/system:controller:root-ca-cert-publisher                               44d
+system:controller:route-controller                              ClusterRole/system:controller:route-controller                                     44d
+system:controller:service-account-controller                    ClusterRole/system:controller:service-account-controller                           44d
+system:controller:service-controller                            ClusterRole/system:controller:service-controller                                   44d
+system:controller:statefulset-controller                        ClusterRole/system:controller:statefulset-controller 
+                              44d
+system:controller:ttl-after-finished-controller                 ClusterRole/system:controller:ttl-after-finished-controller                        44d
+system:controller:ttl-controller                                ClusterRole/system:controller:ttl-controller         
+                              44d
+system:controller:validatingadmissionpolicy-status-controller   ClusterRole/system:controller:validatingadmissionpolicy-status-controller          44d
+system:coredns                                                  ClusterRole/system:coredns                           
+                              44d
+system:discovery                                                ClusterRole/system:discovery                         
+                              44d
+system:kube-controller-manager                                  ClusterRole/system:kube-controller-manager           
+                              44d
+system:kube-dns                                                 ClusterRole/system:kube-dns                          
+                              44d
+system:kube-scheduler                                           ClusterRole/system:kube-scheduler                    
+                              44d
+system:metrics-server                                           ClusterRole/system:metrics-server                    
+                              17d
+system:monitoring                                               ClusterRole/system:monitoring                        
+                              44d
+system:node                                                     ClusterRole/system:node                              
+                              44d
+system:node-proxier                                             ClusterRole/system:node-proxier                      
+                              44d
+system:public-info-viewer                                       ClusterRole/system:public-info-viewer                
+                              44d
+system:service-account-issuer-discovery                         ClusterRole/system:service-account-issuer-discovery                                44d
+system:volume-scheduler                                         ClusterRole/system:volume-scheduler                  
+                              44d
+vpnkit-controller                                               ClusterRole/vpnkit-controller  
+```
+
+常见用法表格
 
 
 
+#### HELM 包管理器
+https://helm.sh/zh/
 
 
-
-#### HELM包管理
 
 
 
