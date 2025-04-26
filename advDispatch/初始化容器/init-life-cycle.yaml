@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: init-demo
+spec:
+  initContainers: # 定义初始化容器
+    - name: init-myservice
+      image: busybox # 用 busybox 镜像
+      command: ["sh", "-c", 'echo "我是初始化容器，准备环境中..."; sleep 5']
+      # 这里简单地打印一行日志，并睡眠5秒，模拟初始化工作
+    - name: init-mydb
+      image: busybox
+      command: ["sh", "-c", 'echo "我正在连接数据库初始化..."; sleep 3']
+      # 第二个 Init 容器，也是按顺序运行的
+  containers: # 这里是主业务容器
+    - name: myapp-container
+      image: busybox
+      command: ["sh", "-c", 'echo "主应用开始工作啦！"; sleep 3600']
+      # 主容器也简单地打个日志然后休眠一小时，保持 Pod 不退出
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "100Mi"
+        limits:
+          cpu: "200m"
+          memory: "200Mi"
+  restartPolicy: Never

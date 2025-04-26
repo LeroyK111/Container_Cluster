@@ -9454,19 +9454,335 @@ roleRef:
 ```
 ###### selflnk细节
 ![](assets/Pasted%20image%2020250424003038.png)
-
-
 #### 高级调度
 
 ##### Cronjob 定时任务
+类似 linux 中的 crontab 命令, windows则需要计划任务管理器.
+```yml
+apiVersion: batch/v1 # 使用 batch API 组，v1 版本
 
+kind: CronJob # 声明资源类型为 CronJob
 
+metadata:
 
+  name: hello-cronjob # CronJob 的名字，集群内必须唯一
+
+spec:
+
+  concurrencyPolicy: Allow # 并发策略，Allow（允许并发执行）、Forbid（禁止并发执行）、Replace（替换老的执行）
+
+  failedJobsHistoryLimit: 1 # 失败的 Job 保留历史数量，超过后旧的会被删除
+
+  successfulJobsHistoryLimit: 3 # 成功的 Job 保留历史数量
+
+  suspend: false # 是否暂停调度，true 表示暂停，不再新建 Job，false 表示正常调度
+
+  # startingDeadlineSeconds: 30 # （可选）错过调度时间后，允许启动 Job 的最大延迟秒数（过期不执行）
+
+  # 分0-59 时0-23 日1-31 月1-12 星期0-7
+
+  schedule: "* * * * *" # Cron 表达式，定义执行周期，这里是每1分钟执行一次
+
+  jobTemplate: # 定义每次调度创建的 Job 模板
+
+    spec:
+
+      template:
+
+        spec:
+
+          containers:
+
+            - name: cron-busybox # 容器名称
+
+              image: busybox # 使用 busybox 镜像，非常小巧，适合简单命令
+
+              imagePullPolicy: IfNotPresent # 如果本地没有镜像就拉取，有的话复用
+
+              args:
+
+                - /bin/sh
+
+                - -c
+
+                - date; echo Hello from Kubernetes CronJob # 容器启动后执行的命令，打印当前时间和问候语
+
+          restartPolicy: OnFailure # 容器失败时才重启（OnFailure），正常退出（exit 0）则不重启
+```
+查看cj参数
+```sh
+> kubectl create -f .\hello-cronjob.yaml --save-config
+cronjob.batch/hello-cronjob created
+
+> kubectl get cj
+NAME            SCHEDULE    TIMEZONE   SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+hello-cronjob   * * * * *   <none>     False     0        45s             54s
+
+> kubectl describe cj hello-cronjob
+Name:                          hello-cronjob
+Namespace:                     default
+Labels:                        <none>
+Annotations:                   <none>
+Schedule:                      * * * * *
+Concurrency Policy:            Allow
+Suspend:                       False
+Successful Job History Limit:  3
+Failed Job History Limit:      1
+Starting Deadline Seconds:     <unset>
+Selector:                      <unset>
+Parallelism:                   <unset>
+Completions:                   <unset>
+Pod Template:
+  Labels:  <none>
+  Containers:
+   cron-busybox:
+    Image:      busybox
+    Port:       <none>
+    Host Port:  <none>
+    Args:
+      /bin/sh
+      -c
+      date; echo Hello from Kubernetes CronJob
+    Environment:     <none>
+    Mounts:          <none>
+  Volumes:           <none>
+  Node-Selectors:    <none>
+  Tolerations:       <none>
+Last Schedule Time:  Sat, 26 Apr 2025 18:26:00 +0800
+Active Jobs:         hello-cronjob-29094386
+Events:
+  Type    Reason            Age   From                Message
+  ----    ------            ----  ----                -------
+  Normal  SuccessfulCreate  2m2s  cronjob-controller  Created job hello-cronjob-29094384
+  Normal  SawCompletedJob   119s  cronjob-controller  Saw completed job: hello-cronjob-29094384, condition: Complete 
+  Normal  SuccessfulCreate  62s   cronjob-controller  Created job hello-cronjob-29094385
+  Normal  SawCompletedJob   59s   cronjob-controller  Saw completed job: hello-cronjob-29094385, condition: Complete 
+  Normal  SuccessfulCreate  2s    cronjob-controller  Created job hello-cronjob-29094386
+```
+查看3个保留container 
+```sh
+# 查看cronjob generate 生成的 3个容器
+> kubectl get pod
+NAME                            READY   STATUS      RESTARTS        AGE
+demo-app                        1/1     Running     9 (12h ago)     4d22h
+dns-test                        1/1     Running     22 (12h ago)    13d
+empty-pod                       2/2     Running     77 (112s ago)   3d19h
+hello-cronjob-29094421-hr95t    0/1     Completed   0               2m14s
+hello-cronjob-29094422-cmn46    0/1     Completed   0               74s
+hello-cronjob-29094423-7g9bw    0/1     Completed   0               14s
+nginx-deploy-65f5b4d495-jf5lc   1/1     Running     15 (12h ago)    8d
+nginx-deploy-65f5b4d495-xlb6r   1/1     Running     15 (12h ago)    8d
+test-file                       0/1     Completed   0               9d
+test-volume-pd                  1/1     Running     9 (12h ago)     4d20h
+
+# 查看打印历史
+> kubectl logs -f hello-cronjob-29094422-cmn46
+Sat Apr 26 11:02:00 UTC 2025
+Hello from Kubernetes CronJob
+
+# 删除定时任务
+> kubectl delete cj hello-cronjob
+cronjob.batch "hello-cronjob" deleted
+```
 
 ##### Init初始化容器
+这里就是生命周期的概念了.
+![](https://raw.githubusercontent.com/LeroyK111/pictureBed/master/20250426192230.png)
 
+```yml
+apiVersion: v1
 
+kind: Pod
 
+metadata:
+
+  name: init-demo
+
+spec:
+
+  initContainers: # 定义初始化容器
+
+    - name: init-myservice
+
+      image: busybox # 用 busybox 镜像
+
+      command: ["sh", "-c", 'echo "我是初始化容器，准备环境中..."; sleep 5']
+
+      # 这里简单地打印一行日志，并睡眠5秒，模拟初始化工作
+
+    - name: init-mydb
+
+      image: busybox
+
+      command: ["sh", "-c", 'echo "我正在连接数据库初始化..."; sleep 3']
+
+      # 第二个 Init 容器，也是按顺序运行的
+
+  containers: # 这里是主业务容器
+
+    - name: myapp-container
+
+      image: busybox
+
+      command: ["sh", "-c", 'echo "主应用开始工作啦！"; sleep 3600']
+
+      # 主容器也简单地打个日志然后休眠一小时，保持 Pod 不退出
+
+      resources:
+
+        requests:
+
+          cpu: "100m"
+
+          memory: "100Mi"
+
+        limits:
+
+          cpu: "200m"
+
+          memory: "200Mi"
+
+  restartPolicy: Never
+```
+
+```sh
+> kubectl create -f .\init-life-cycle.yaml --save-config    
+pod/init-demo created
+
+> kubectl get po
+NAME                            READY   STATUS      RESTARTS       AGE
+demo-app                        1/1     Running     9 (12h ago)    4d22h
+dns-test                        1/1     Running     22 (12h ago)   13d
+empty-pod                       2/2     Running     77 (37m ago)   3d20h
+init-demo                       0/1     Init:0/2    0              34s
+nginx-deploy-65f5b4d495-jf5lc   1/1     Running     15 (12h ago)   8d
+nginx-deploy-65f5b4d495-xlb6r   1/1     Running     15 (12h ago)   8d
+test-file                       0/1     Completed   0              9d
+test-volume-pd                  1/1     Running     9 (12h ago)    4d20h
+```
+
+```sh
+# 这里只能看到容器彻底启动后的log
+> kubectl logs init-demo 
+Defaulted container "myapp-container" out of: myapp-container, init-myservice (init), init-mydb (init)
+主应用开始工作啦！
+
+# 只能在这里查看到init logs
+> kubectl describe pod init-demo
+Name:             init-demo
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             docker-desktop/192.168.65.3
+Start Time:       Sat, 26 Apr 2025 19:38:30 +0800
+Labels:           <none>
+Annotations:      <none>
+Status:           Running
+IP:               10.1.6.169
+IPs:
+  IP:  10.1.6.169
+Init Containers:
+  init-myservice:
+    Container ID:  docker://6e9ec8a8b6f6b774f7d1707e1c13a607beaba9dbb80c5770e11e15a6f38e337c
+    Image:         busybox
+    Image ID:      docker-pullable://busybox@sha256:37f7b378a29ceb4c551b1b5582e27747b855bbfaa73fa11914fe0df028dc581f 
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo "我是初始化容器，准备环境中..."; sleep 5
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Sat, 26 Apr 2025 19:39:23 +0800
+      Finished:     Sat, 26 Apr 2025 19:39:28 +0800
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-swdfw (ro)
+  init-mydb:
+    Container ID:  docker://e9ac3fd7283d5a6ad763e69ce4f83273d2bc1fefbd858f5f794a715320cf362a
+    Image:         busybox
+    Image ID:      docker-pullable://busybox@sha256:37f7b378a29ceb4c551b1b5582e27747b855bbfaa73fa11914fe0df028dc581f 
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo "我正在连接数据库初始化..."; sleep 3
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Sat, 26 Apr 2025 19:40:08 +0800
+      Finished:     Sat, 26 Apr 2025 19:40:11 +0800
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-swdfw (ro)
+Containers:
+  myapp-container:
+    Container ID:  docker://a28364568b288fc039df8ed34a2854c845e7962b74d9affc0e13dcd296c9bbcb
+    Image:         busybox
+    Image ID:      docker-pullable://busybox@sha256:37f7b378a29ceb4c551b1b5582e27747b855bbfaa73fa11914fe0df028dc581f 
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo "主应用开始工作啦！"; sleep 3600
+    State:          Running
+      Started:      Sat, 26 Apr 2025 19:40:51 +0800
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     200m
+      memory:  200Mi
+    Requests:
+      cpu:        100m
+      memory:     100Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-swdfw (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True
+  Initialized                 True
+  Ready                       True
+  ContainersReady             True
+  PodScheduled                True
+Volumes:
+  kube-api-access-swdfw:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age    From               Message
+  ----    ------     ----   ----               -------
+  Normal  Scheduled  5m31s  default-scheduler  Successfully assigned default/init-demo to docker-desktop
+  Normal  Pulling    5m31s  kubelet            Pulling image "busybox"
+  Normal  Pulled     4m38s  kubelet            Successfully pulled image "busybox" in 52.538s (52.538s including waiting). Image size: 4277910 bytes.
+  Normal  Created    4m38s  kubelet            Created container: init-myservice
+  Normal  Started    4m38s  kubelet            Started container init-myservice
+  Normal  Pulling    4m32s  kubelet            Pulling image "busybox"
+  Normal  Pulled     3m53s  kubelet            Successfully pulled image "busybox" in 39.414s (39.414s including waiting). Image size: 4277910 bytes.
+  Normal  Created    3m53s  kubelet            Created container: init-mydb
+  Normal  Started    3m53s  kubelet            Started container init-mydb
+  Normal  Pulling    3m49s  kubelet            Pulling image "busybox"
+  Normal  Pulled     3m10s  kubelet            Successfully pulled image "busybox" in 39.435s (39.435s including waiting). Image size: 4277910 bytes.
+  Normal  Created    3m10s  kubelet            Created container: myapp-container
+  Normal  Started    3m10s  kubelet            Started container myapp-container
+```
+
+构建复杂的容器镜像.
 ##### 污点和容忍
 
 

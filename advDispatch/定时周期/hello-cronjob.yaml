@@ -1,0 +1,25 @@
+apiVersion: batch/v1 # 使用 batch API 组，v1 版本
+kind: CronJob # 声明资源类型为 CronJob
+metadata:
+  name: hello-cronjob # CronJob 的名字，集群内必须唯一
+spec:
+  concurrencyPolicy: Allow # 并发策略，Allow（允许并发执行）、Forbid（禁止并发执行）、Replace（替换老的执行）
+  failedJobsHistoryLimit: 1 # 失败的 Job 保留历史数量，超过后旧的会被删除
+  successfulJobsHistoryLimit: 3 # 成功的 Job 保留历史数量
+  suspend: false # 是否暂停调度，true 表示暂停，不再新建 Job，false 表示正常调度
+  # startingDeadlineSeconds: 30 # （可选）错过调度时间后，允许启动 Job 的最大延迟秒数（过期不执行）
+  # 分0-59 时0-23 日1-31 月1-12 星期0-7
+  schedule: "* * * * *" # Cron 表达式，定义执行周期，这里是每1分钟执行一次
+  jobTemplate: # 定义每次调度创建的 Job 模板
+    spec:
+      template:
+        spec:
+          containers:
+            - name: cron-busybox # 容器名称
+              image: busybox # 使用 busybox 镜像，非常小巧，适合简单命令
+              imagePullPolicy: IfNotPresent # 如果本地没有镜像就拉取，有的话复用
+              args:
+                - /bin/sh
+                - -c
+                - date; echo Hello from Kubernetes CronJob # 容器启动后执行的命令，打印当前时间和问候语
+          restartPolicy: OnFailure # 容器失败时才重启（OnFailure），正常退出（exit 0）则不重启
