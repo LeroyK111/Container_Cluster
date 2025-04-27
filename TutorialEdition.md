@@ -10600,6 +10600,84 @@ my-chart/
 ![](assets/Pasted%20image%2020250427111815.png)
 
 ##### Prometheus + Grafana 主流方案
+Prometheus： 集群监控
+Grafana：监控UI
+```sh
+heapster 已经不再维护。
+weave scope 简易版本，可以考虑。
+```
+架构图：
+![](assets/Pasted%20image%2020250427122458.png)
+也会利用时序数据库进行日志和监听数据的存储和处理。
+###### 自定义配置
+![](assets/Pasted%20image%2020250427124149.png)
+必须手动配置所有的角色，权限，任务等等。
+![](assets/Pasted%20image%2020250427124719.png)
+![](assets/Pasted%20image%2020250427124741.png)
+自带界面：
+![](assets/Pasted%20image%2020250427125018.png)
+grafana 界面：admin
+![](assets/Pasted%20image%2020250427125212.png)
+直接选择template view page 挺好。建立监控指标。
+
+###### 集成配置
+
+三种安装方式：
+- yaml 安装文件
+- **步骤1**：通过 `bundle.yaml` 文件直接安装到默认命名空间。
+    
+- **步骤2**：通过 `Kustomize` 修改命名空间，安装到非默认命名空间。
+    
+- **步骤3**：检查安装是否完成，并等待 Operator 运行就绪。
+```sh
+
+# 安装 CRDs 和 Operator 资源（默认命名空间） 
+LATEST=$(curl -s https://api.github.com/repos/prometheus-operator/prometheus-operator/releases/latest | jq -cr .tag_name) curl -sL https://github.com/prometheus-operator/prometheus-operator/releases/download/${LATEST}/bundle.yaml | kubectl create -f -
+
+# 通过 `Kustomize` 修改命名空间，安装到非默认命名空间。
+NAMESPACE=my_namespace TMPDIR=$(mktemp -d) LATEST=$(curl -s https://api.github.com/repos/prometheus-operator/prometheus-operator/releases/latest | jq -cr .tag_name) curl -s "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/refs/tags/$LATEST/kustomization.yaml" > "$TMPDIR/kustomization.yaml" curl -s "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/refs/tags/$LATEST/bundle.yaml" > "$TMPDIR/bundle.yaml" (cd $TMPDIR && kustomize edit set namespace $NAMESPACE) && kubectl create -k "$TMPDIR"
+
+# 检查安装是否完成，并等待 Operator 运行就绪。
+kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=prometheus-operator
+```
+
+
+- kube-Prometheus 安装
+- **部署步骤**：
+    
+    - 克隆或下载 **kube-prometheus** 仓库。
+        
+    - 创建命名空间和 CRDs。
+        
+    - 等待 CRDs 准备好后，创建所有 Prometheus Operator 和相关资源。
+        
+- **访问资源**：可以参考官方文档获取 Prometheus 和 Alertmanager 的访问方式。
+    
+- **移除部署**：使用 `kubectl delete` 命令删除所有资源。
+```sh
+>git clone https://github.com/prometheus-operator/kube-prometheus.git
+>cd kube-prometheus
+# **创建命名空间和 CRDs**：
+>kubectl create -f manifests/setup
+
+# **等待 CRDs 准备就绪**：
+>until kubectl get servicemonitors --all-namespaces ; do date; sleep 1; echo ""; done
+
+# 部署其他资源
+>kubectl create -f manifests/
+
+# 合并命令（可选）
+>kubectl create -f manifests/setup -f manifests
+
+# 移除
+》kubectl delete --ignore-not-found=true -f manifests/ -f manifests/setup
+
+```
+![](assets/Pasted%20image%2020250427132134.png)
+![](assets/Pasted%20image%2020250427132152.png)
+默认使用 域名进行访问，使用 ingress service 进行访问。
+
+
 
 
 
