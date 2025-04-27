@@ -10596,7 +10596,15 @@ my-chart/
 ##### 删除
 ![](assets/Pasted%20image%2020250427111249.png)
 记住，有状态应用，pv/pvc 不会被删除。
-#### 集群监控
+#### 集群监控 IAAS
+![](assets/Pasted%20image%2020250427111815.png)
+
+
+
+
+
+
+
 
 
 #### 集群日志管理ELK
