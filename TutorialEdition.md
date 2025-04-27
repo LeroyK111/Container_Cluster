@@ -10527,6 +10527,7 @@ Helm 两个组件：
 - linux/BSD 等等系统，下载对应安装包即可。
 
 后续我们将以linux为主，进行学习。
+复杂用法请看： [readme](HELM/readme.md)
 
 ```sh
 # 将 helm程序 移动到 usr/local/bin/helm 其实是添加到用户环境变量中
@@ -10588,14 +10589,13 @@ my-chart/
 ![](assets/Pasted%20image%2020250427110011.png)
 ![](assets/Pasted%20image%2020250427110033.png)
 
+使用history 进行版本 rollback
+![](assets/Pasted%20image%2020250427110856.png)
+![](assets/Pasted%20image%2020250427111044.png)
 
-
-
-
-
-
-
-
+##### 删除
+![](assets/Pasted%20image%2020250427111249.png)
+记住，有状态应用，pv/pvc 不会被删除。
 #### 集群监控
 
 
