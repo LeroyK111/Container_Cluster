@@ -10522,11 +10522,66 @@ Helm 两个组件：
 | **查看帮助**                 | 查看 Helm 命令和子命令的帮助信息。                       | `helm help`                                                              |
 | **导出 Helm 发布值**          | 获取当前发布的所有 Values 配置。                       | `helm get values my-release`                                             |
 
-##### 
+##### 安装Helm
+- windows可以安装，但是bug比较多，需要考虑清楚。
+- linux/BSD 等等系统，下载对应安装包即可。
 
+后续我们将以linux为主，进行学习。
 
+```sh
+# 将 helm程序 移动到 usr/local/bin/helm 其实是添加到用户环境变量中
+# 可以添加国内镜像站点给helm
 
+> helm version  
+version.BuildInfo{Version:"v3.17.2", GitCommit:"cc0bbbd6d6276b83880042c1ecb34087e84d41eb", GitTreeState:"clean", GoVersion:"go1.23.7"}
 
+# 从官方 仓库 搜索
+> helm search repo redis
+# 从 docker hub 上搜索
+> helm search hub redis 
+```
+
+![](assets/Pasted%20image%2020250427104029.png)
+![](assets/Pasted%20image%2020250427104058.png)
+
+##### 基于chart 进行管理
+
+| **目录/文件**              | **说明**                                                          |
+| ---------------------- | --------------------------------------------------------------- |
+| **Chart.yaml**         | Chart 的元数据文件，包含 Chart 的名称、版本、描述等信息。                             |
+| **values.yaml**        | Chart 的默认配置文件，用户可以在部署时修改该文件中的内容来覆盖默认配置。                         |
+| **charts/**            | 存放该 Chart 所依赖的其他 Charts 文件。用于存放由 `helm dependency` 安装的依赖。       |
+| **templates/**         | 包含 Kubernetes 资源定义的目录，这些模板文件会在部署时被渲染为 Kubernetes 对象。            |
+| **README.md**          | 可选文件，通常用来描述该 Chart 的使用说明、部署步骤以及可能的自定义配置。                        |
+| **crds/**              | 可选目录，用于存放 Custom Resource Definitions (CRDs)，如果该 Chart 使用自定义资源。 |
+| **values.schema.json** | 可选文件，用于定义 `values.yaml` 文件的结构和数据验证规则。                           |
+| **LICENSE**            | 可选文件，包含 Chart 的开源许可证信息。                                         |
+| **NOTES.txt**          | 可选文件，包含安装后可以提供给用户的有用信息，通常包括 Chart 部署后的操作指南。                     |
+```
+my-chart/
+├── Chart.yaml
+├── values.yaml
+├── charts/
+├── templates/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── ingress.yaml
+├── README.md
+└── LICENSE
+```
+
+重要的是values.yaml 包含了我们所有的配置。
+![](assets/Pasted%20image%2020250427104655.png)
+![](assets/Pasted%20image%2020250427104714.png)
+拉取 redis 安装包
+![](assets/Pasted%20image%2020250427104929.png)
+![](assets/Pasted%20image%2020250427105236.png)
+![](assets/Pasted%20image%2020250427105335.png)
+![](assets/Pasted%20image%2020250427105355.png)
+如果有问题，记得看一下sc的问题。
+![](assets/Pasted%20image%2020250427105458.png)
+
+##### 升级和回滚
 
 
 
