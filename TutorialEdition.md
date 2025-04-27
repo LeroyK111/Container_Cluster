@@ -10485,10 +10485,31 @@ vpnkit-controller                                               ClusterRole/vpnk
 https://helm.sh/zh/
 这里仅记录常用命令，其他 command 自查.
 
-Helm
+Helm 三个重要概念：
+- chart 创建k8s应用程序所必须的一组信息。
+- config 包含了可以合并到打包的chart中的配置信息，用于创建一个可发布的对象。
+- release 是一个与特定配置相结合的chart的运行实例。
+
+Helm 两个组件：
+- Helm客户端：依然是基于shell的CLI 操作
+- Helm库，library 及 plug-in 插件的使用管理。
 
 
-
+| **命令/概念**          | **说明**                         | **示例**                                                                   |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------ |
+| **Helm 安装**        | 用于安装 Helm 到本地系统                | `curl https://get.helm.sh/helm-v3.7.1-linux-amd64.tar.gz -o helm.tar.gz` |
+| **初始化 Helm**       | 初始化 Helm 客户端并连接到 Kubernetes 集群 | `helm init`（v3 版本不再使用此命令）                                                |
+| **安装 Chart**       | 使用 Helm 安装一个 Chart 并部署应用程序     | `helm install my-release my-chart/`                                      |
+| **升级 Chart**       | 升级已安装的应用程序版本                   | `helm upgrade my-release my-chart/`                                      |
+| **删除发布**           | 卸载一个已安装的 Helm 发布               | `helm uninstall my-release`                                              |
+| **查看已安装的 Chart**   | 列出所有已安装的 Helm 发布               | `helm list`                                                              |
+| **获取 Chart 的详细信息** | 查看一个已安装 Helm 发布的详细信息           | `helm status my-release`                                                 |
+| **搜索 Helm Chart**  | 在 Chart 仓库中搜索并列出 Chart         | `helm search repo <chart-name>`                                          |
+| **获取 Chart 的模板**   | 查看 Chart 中的 Kubernetes 资源模板    | `helm show values my-chart/`                                             |
+| **更新 Helm 仓库**     | 更新本地 Helm 仓库索引                 | `helm repo update`                                                       |
+| **Chart 包的打包和分享**  | 打包一个本地 Chart 并上传到 Helm 仓库      | `helm package my-chart/`                                                 |
+| **查看 Helm 仓库**     | 列出所有已配置的 Helm 仓库               | `helm repo list`                                                         |
+| **获取 Helm 帮助**     | 显示 Helm 命令的帮助信息                | `helm help`                                                              |
 
 
 #### 集群监控
