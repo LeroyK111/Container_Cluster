@@ -10676,29 +10676,81 @@ kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=prometheus-ope
 ![](assets/Pasted%20image%2020250427132134.png)
 ![](assets/Pasted%20image%2020250427132152.png)
 默认使用 域名进行访问，使用 ingress service 进行访问。
-
-
-
-
-
-
-
-
-
-
 #### 集群日志管理ELK
+**ELK 堆栈（Elasticsearch + Logstash + Kibana）**
 
+ELK 堆栈与 EFK 类似，只是使用 **Logstash** 替代了 Fluentd。Logstash 用于处理和转换日志数据，然后将其发送到 Elasticsearch。
+
+- **Logstash** 提供了丰富的数据处理功能，可以对日志进行更复杂的转换、过滤和增强。
+    
+- 支持广泛的输入和输出插件，灵活性高。
+
+- 需要对日志进行复杂处理或转换的场景。
+    
+- 需要多个数据源或复杂数据管道的场景。
+    
+类似 EFK，ELK 堆栈也可以使用 Helm 安装，或者根据需求进行自定义部署。
+
+![](assets/Pasted%20image%2020250427133650.png)
+![](assets/Pasted%20image%2020250427134121.png)
+中间过程后续再说。
+![](assets/Pasted%20image%2020250427135145.png)
+##### 更主流日志方案
+
+| **方案**                                      | **优点**                    | **适用场景**                  |
+| ------------------------------------------- | ------------------------- | ------------------------- |
+| **EFK (Elasticsearch + Fluentd + Kibana)**  | 强大的日志存储、查询、可视化能力，适合大规模集群  | 大规模集群日志管理，复杂日志查询与分析       |
+| **ELK (Elasticsearch + Logstash + Kibana)** | 灵活的日志处理能力，适合复杂数据管道        | 需要日志数据转换、过滤和增强的场景         |
+| **Prometheus + Loki + Grafana**             | 与 Prometheus 紧密集成，轻量高效    | Kubernetes、容器化环境的日志和监控整合  |
+| **Fluentd + Graylog**                       | 强大的日志收集和分析，实时日志处理         | 集中管理日志并进行复杂搜索与分析的场景       |
+| **Splunk**                                  | 企业级解决方案，强大的日志分析和安全事件管理    | 跨多个系统的日志管理，企业级的 SIEM      |
+| **Datadog**                                 | 集成监控、日志、APM，一站式解决方案，企业级功能 | 跨多个平台的日志管理，集成监控、日志、APM 需求 |
+
+EFK 堆栈中的组件分别是：
+
+- **Fluentd**：用于收集、过滤和转发日志数据。
+    
+- **Elasticsearch**：用于存储和索引日志数据。
+    
+- **Kibana**：用于日志数据的可视化和查询。
 
 #### 运维管理平台dashbord
+![](assets/Pasted%20image%2020250427135703.png)
 
-
-
-
+| **工具**                        | **特点**                           | **适用场景**                 |
+| ----------------------------- | -------------------------------- | ------------------------ |
+| **Kubernetes Dashboard (官方)** | 简洁易用，适合基础集群管理                    | 基础集群管理和资源查看              |
+| **Lens**                      | 强大的集群管理和集成监控，支持多集群管理             | 需要更强集群管理功能和集群监控的开发者和运维人员 |
+| **Rancher**                   | 多集群管理，支持跨云平台的集群管理和监控             | 大规模集群、多云环境的生产集群管理        |
+| **Portainer**                 | 简洁的 UI，支持 Docker 和 Kubernetes 管理 | 容器管理新手，轻量级集群管理           |
+| **Octant**                    | 轻量级本地部署，支持集群资源视图和事件日志查看          | 开发和调试 Kubernetes 环境      |
+| Kuboard                       |                                  |                          |
+| Kubesphere                    |                                  |                          |
+太多了，选一个合适的就好。
+![](assets/Pasted%20image%2020250427140238.png)
 #### 微服务案例
 
+##### Devops搭建
+![](assets/Pasted%20image%2020250427141453.png)
+![](assets/Pasted%20image%2020250427140352.png)
+微服务用法。
 
-
-
+| **步骤**                | **工具/技术**                                                        | **功能/描述**                                                           |
+| --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **1. 版本控制和代码管理**      | Git, GitHub / GitLab / Bitbucket                                 | 代码版本控制与协作管理。Git 提供本地仓库管理，GitHub / GitLab / Bitbucket 提供远程仓库与团队协作功能。 |
+| **2. 持续集成（CI）**       | Jenkins, GitLab CI, CircleCI, Travis CI                          | 自动化构建、测试和部署，确保开发代码的质量，快速发现并修复错误。                                    |
+| **3. 容器化和虚拟化**        | Docker, Kubernetes, Docker Swarm                                 | 将应用及其依赖打包成容器，确保开发、测试和生产环境的一致性。Kubernetes 用于容器编排，自动化应用的部署、扩展和管理。     |
+| **4. 配置管理与自动化**       | Ansible, Puppet, Chef                                            | 自动化配置和管理基础设施，减少人工干预，提高运维效率。                                         |
+| **5. 基础设施即代码（IaC）**   | Terraform, AWS CloudFormation                                    | 使用代码定义和管理基础设施，确保环境一致性并能自动化部署。                                       |
+| **6. 持续交付（CD）**       | Jenkins, GitLab CI, Argo CD, Spinnaker                           | 自动化将代码部署到生产环境，通过持续交付确保快速且安全的交付更新。                                   |
+| **7. 监控与日志管理**        | Prometheus, Grafana, ELK Stack (Elasticsearch, Logstash, Kibana) | 实时监控应用与基础设施的健康状态，通过日志分析与可视化帮助发现问题并优化系统。                             |
+| **8. 安全性（DevSecOps）** | Aqua Security, Twistlock, Snyk                                   | 加强 DevOps 流程中的安全防护，确保容器、应用及基础设施的安全性。                                |
+| **9. 自动化测试**          | Selenium, JUnit, TestNG, Postman                                 | 自动化测试工具用于确保代码质量，执行单元测试、集成测试和 API 测试。                                |
+| **10. 协作与沟通**         | Slack, Microsoft Teams, Jira                                     | 团队协作与项目管理工具，促进开发与运维团队之间的沟通与协作，集成任务管理和问题追踪。                          |
+| **11. 云平台**           | AWS, Azure, Google Cloud, Kubernetes (云原生)                       | 提供云基础设施服务，支持自动化部署、弹性伸缩和容器管理。                                        |
+到此为止。
+完善CI/CD流程
+![](assets/Pasted%20image%2020250427141700.png)
 
 
 
