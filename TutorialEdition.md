@@ -10582,6 +10582,16 @@ my-chart/
 ![](assets/Pasted%20image%2020250427105458.png)
 
 ##### 升级和回滚
+修改values.yaml
+![](assets/Pasted%20image%2020250427105840.png)
+使用配置文件进行升级
+![](assets/Pasted%20image%2020250427110011.png)
+![](assets/Pasted%20image%2020250427110033.png)
+
+
+
+
+
 
 
 
