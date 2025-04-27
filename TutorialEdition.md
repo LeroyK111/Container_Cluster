@@ -10483,7 +10483,10 @@ vpnkit-controller                                               ClusterRole/vpnk
 | 服务账号 (ServiceAccount) | ClusterRole (集群角色) | ClusterRoleBinding（集群级） | 查询：`kubectl get clusterrolebinding`；创建：`kubectl create clusterrolebinding <绑定名> --clusterrole=<集群角色名> --serviceaccount=<命名空间>:<账号名>`       |
 #### HELM 包管理器
 https://helm.sh/zh/
-这里仅记录常用命令. 
+这里仅记录常用命令，其他 command 自查.
+
+Helm
+
 
 
 
