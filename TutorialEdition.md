@@ -10493,23 +10493,42 @@ Helm 三个重要概念：
 Helm 两个组件：
 - Helm客户端：依然是基于shell的CLI 操作
 - Helm库，library 及 plug-in 插件的使用管理。
+##### 常用命令表格
+
+| **命令**                   | **说明**                                     | **示例**                                                                   |
+| ------------------------ | ------------------------------------------ | ------------------------------------------------------------------------ |
+| **安装 Helm**              | 在本地安装 Helm CLI。                            | `curl https://get.helm.sh/helm-v3.7.1-linux-amd64.tar.gz -o helm.tar.gz` |
+| **安装 Chart**             | 安装一个 Helm Chart 到 Kubernetes 集群。           | `helm install my-release my-chart/`                                      |
+| **升级发布**                 | 升级已安装的 Chart 发布，通常用于更新 Chart 或更改配置文件。      | `helm upgrade my-release my-chart/`                                      |
+| **卸载发布**                 | 删除已经安装的发布。                                 | `helm uninstall my-release`                                              |
+| **查看发布列表**               | 列出当前 Kubernetes 集群中安装的所有 Helm 发布。          | `helm list`                                                              |
+| **查看发布的详细信息**            | 查看某个已安装发布的详细信息。                            | `helm status my-release`                                                 |
+| **获取发布的历史版本**            | 查看已安装发布的历史版本，并查看版本之间的变化。                   | `helm history my-release`                                                |
+| **查看 Chart 的模板**         | 查看一个 Chart 中包含的 Kubernetes 资源模板。           | `helm show chart my-chart/`                                              |
+| **查看 Chart 的 Values 配置** | 显示 Chart 中的默认 Values 配置文件，帮助用户修改 Chart 配置。 | `helm show values my-chart/`                                             |
+| **安装依赖的 Chart**          | 安装与某个 Chart 相关的所有依赖（如果有）。                  | `helm dependency update my-chart/`                                       |
+| **列出 Helm 仓库**           | 查看当前配置的 Helm 仓库。                           | `helm repo list`                                                         |
+| **更新 Helm 仓库**           | 更新本地仓库索引，以获取最新的 Chart 信息。                  | `helm repo update`                                                       |
+| **搜索 Helm Chart**        | 在远程 Helm 仓库中搜索并列出符合条件的 Chart。              | `helm search repo my-chart`                                              |
+| **查看 Chart 的详细信息**       | 获取指定 Chart 的详细信息。                          | `helm show chart my-chart/`                                              |
+| **打包 Chart**             | 将本地 Chart 打包成 `.tgz` 文件，便于分享或上传到仓库。        | `helm package my-chart/`                                                 |
+| **创建新的 Chart**           | 创建一个新的 Helm Chart 模板。                      | `helm create my-new-chart`                                               |
+| **清理不再使用的发布**            | 清理删除的发布的相关信息。                              | `helm cleanup`                                                           |
+| **验证 Chart**             | 在本地验证一个 Chart 配置的有效性。                      | `helm lint my-chart/`                                                    |
+| **导出 Helm 模板**           | 将 Helm Chart 渲染后的 Kubernetes 资源导出到文件中。     | `helm template my-release my-chart/ > output.yaml`                       |
+| **设置 Helm 仓库**           | 添加新的 Helm 仓库，配置仓库地址。                       | `helm repo add my-repo https://charts.myrepo.com`                        |
+| **删除 Helm 仓库**           | 删除已配置的 Helm 仓库。                            | `helm repo remove my-repo`                                               |
+| **显示 Helm 版本**           | 显示当前 Helm CLI 的版本信息。                       | `helm version`                                                           |
+| **查看帮助**                 | 查看 Helm 命令和子命令的帮助信息。                       | `helm help`                                                              |
+| **导出 Helm 发布值**          | 获取当前发布的所有 Values 配置。                       | `helm get values my-release`                                             |
+
+##### 
 
 
-| **命令/概念**          | **说明**                         | **示例**                                                                   |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------ |
-| **Helm 安装**        | 用于安装 Helm 到本地系统                | `curl https://get.helm.sh/helm-v3.7.1-linux-amd64.tar.gz -o helm.tar.gz` |
-| **初始化 Helm**       | 初始化 Helm 客户端并连接到 Kubernetes 集群 | `helm init`（v3 版本不再使用此命令）                                                |
-| **安装 Chart**       | 使用 Helm 安装一个 Chart 并部署应用程序     | `helm install my-release my-chart/`                                      |
-| **升级 Chart**       | 升级已安装的应用程序版本                   | `helm upgrade my-release my-chart/`                                      |
-| **删除发布**           | 卸载一个已安装的 Helm 发布               | `helm uninstall my-release`                                              |
-| **查看已安装的 Chart**   | 列出所有已安装的 Helm 发布               | `helm list`                                                              |
-| **获取 Chart 的详细信息** | 查看一个已安装 Helm 发布的详细信息           | `helm status my-release`                                                 |
-| **搜索 Helm Chart**  | 在 Chart 仓库中搜索并列出 Chart         | `helm search repo <chart-name>`                                          |
-| **获取 Chart 的模板**   | 查看 Chart 中的 Kubernetes 资源模板    | `helm show values my-chart/`                                             |
-| **更新 Helm 仓库**     | 更新本地 Helm 仓库索引                 | `helm repo update`                                                       |
-| **Chart 包的打包和分享**  | 打包一个本地 Chart 并上传到 Helm 仓库      | `helm package my-chart/`                                                 |
-| **查看 Helm 仓库**     | 列出所有已配置的 Helm 仓库               | `helm repo list`                                                         |
-| **获取 Helm 帮助**     | 显示 Helm 命令的帮助信息                | `helm help`                                                              |
+
+
+
+
 
 
 #### 集群监控
